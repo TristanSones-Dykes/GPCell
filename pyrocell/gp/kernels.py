@@ -1,7 +1,8 @@
 from pyro.contrib.gp.kernels import Isotropy
+
 import torch
 
-# Isoptropic kernels
+# Isotropic kernels
 class Matern12(Isotropy):
     """
     Matern 1/2 kernel, non-smooth and non-differentiable

@@ -1,7 +1,10 @@
+
+
 import pandas as pd
 import numpy as np
+from numpy import ndarray
 
-def load_data(path: str) -> tuple:
+def load_data(path: str) -> tuple[ndarray, ndarray, ndarray, int, ndarray, ndarray, int]:
     """
     Loads experiment data from a csv file. This file must have:
     - Time (h) column
