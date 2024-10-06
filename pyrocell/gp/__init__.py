@@ -7,8 +7,6 @@ from . import kernels
 import pyro
 import pyro.contrib.gp.kernels
 import pyro.nn
-import pyro.distributions as dist
-from pyro.nn.module import PyroSample, PyroParam
 import torch
 import matplotlib.pyplot as plt
 
