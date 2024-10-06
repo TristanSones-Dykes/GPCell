@@ -11,3 +11,5 @@
 The documentation can be found as a html in the `docs/` directory, it is generated using pdoc, which you can run locally using:
  - `pdoc pyrocell` to host a local, live version of the documentation.
  - `pdoc -o docs pyrocell` to generate and save the documentation in the `docs/` directory.
+
+You can view the documentation without running any commands by opening `docs/index.html` in your file explorer.
