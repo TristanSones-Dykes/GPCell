@@ -11,11 +11,29 @@ import numpy as np
 
 
 class GaussianProcess:
+    """
+    Gaussian Process class for fitting and evaluating parameters
+    """
     def __init__(self, kernel: pyro.contrib.gp.kernels.Isotropy, optimizer: torch.optim.Optimizer):
         self.kernel = kernel
+        """Kernel for the Gaussian Process"""
         self.optimizer = optimizer
+        """Optimizer for the Gaussian Process"""
 
     def fit(self, X: torch.Tensor, y: torch.Tensor, loss_fn: torch.nn.Module, lr: float = 0.01, num_steps: int = 1000, priors: dict = {}, verbose: bool = False):
+        """
+        Fit the Gaussian Process model, saves the model and training values for later use if needed.
+
+        :param torch.Tensor X: Input domain
+        :param torch.Tensor y: Target values
+        :param torch.nn.Module loss_fn: Loss function
+        :param float lr: Learning rate
+        :param int num_steps: Number of steps
+        :param dict priors: Priors for the kernel parameters
+        :param bool verbose: Print training information
+
+        :return: None
+        """
         # initialise kernel
         kernel = self.kernel(input_dim = 1)
 
@@ -64,6 +82,11 @@ class GaussianProcess:
         self.fit_gp = sgpr
 
     def test_plot(self):
+        """
+        Create a test plot of the fitted model on the training data
+        
+        :return: None
+        """
         # check if fit_gp exists
         if not hasattr(self, "fit_gp"):
             raise AttributeError("Please fit the model first")
