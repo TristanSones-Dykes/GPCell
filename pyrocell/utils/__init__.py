@@ -1,8 +1,8 @@
 import pandas as pd
-import numpy as np
-from numpy import ndarray
+import torch
+from torch import Tensor
 
-def load_data(path: str) -> tuple[ndarray, ndarray, ndarray, int, ndarray, ndarray, int]:
+def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]:
     """
     Loads experiment data from a csv file. This file must have:
     - Time (h) column
@@ -23,28 +23,25 @@ def load_data(path: str) -> tuple[ndarray, ndarray, ndarray, int, ndarray, ndarr
     df = pd.read_csv(path).fillna(0)  
     data_cols = [col for col in df if col.startswith('Cell')]
     bckgd_cols = [col for col in df if col.startswith('Background')]
-    time = df['Time (h)'].values[:,None]
+    time = torch.from_numpy(df['Time (h)'].values[:,None])
 
-    bckgd = df[bckgd_cols].values
-    M = np.shape(bckgd)[1]
+    bckgd = torch.from_numpy(df[bckgd_cols].values)
+    M = bckgd.shape[1]
     
-    bckgd_length = np.zeros(M,dtype=np.int32)
+    bckgd_length = torch.zeros(M,dtype=torch.int32)
     
     for i in range(M):
         bckgd_curr = bckgd[:,i]
-        bckgd_length[i] = np.max(np.nonzero(bckgd_curr))
+        bckgd_length[i] = torch.max(torch.nonzero(bckgd_curr))
         
-    y_all = df[data_cols].values  
+    y_all = torch.from_numpy(df[data_cols].values)
     
-    N = np.shape(y_all)[1]
+    N = y_all.shape[1]
     
-    y_all = df[data_cols].values
-    np.max(np.nonzero(y_all))
-    
-    y_length = np.zeros(N,dtype=np.int32)
+    y_length = torch.zeros(N,dtype=torch.int32)
     
     for i in range(N):
         y_curr = y_all[:,i]
-        y_length[i] = np.max(np.nonzero(y_curr))    
+        y_length[i] = torch.max(torch.nonzero(y_curr))
 
     return time, bckgd, bckgd_length, M, y_all, y_length, N

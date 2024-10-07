@@ -7,6 +7,7 @@ from . import kernels
 import pyro
 import pyro.contrib.gp.kernels
 import pyro.nn
+from pyro.nn.module import PyroParam
 import torch
 import matplotlib.pyplot as plt
 
@@ -76,27 +77,15 @@ class GaussianProcess:
         print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
         
         # save data vals for test and plotting
-        self.XRANGE = [X.min().item(), X.max().item()]
-        self.NUM_POINTS = X.shape[0]
         self.X_true = X
         self.y_true = y
+        
+        with torch.no_grad():
+            self.mean, self.cov = sgpr(X, full_cov=True, noiseless=False)
+            self.std = self.cov.diag().sqrt()
 
         self.fit_gp = sgpr
-
-    def predict(self, X: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Predict the mean and standard deviation of the Gaussian Process
-
-        :param torch.Tensor X: Input domain
-
-        :return: mean, sd
-        """
-        with torch.no_grad():
-            mean, cov = self.fit_gp(X, full_cov=True, noiseless=False)
-            sd = cov.diag().sqrt()
-
-        return mean, sd
-
+        self.params = sgpr.parameters()
 
     def test_plot(self, plot_sd: bool = False):
         """
@@ -109,16 +98,56 @@ class GaussianProcess:
             raise AttributeError("Please fit the model first")
         
         # plot
-        Xtest = self.X_true 
-        with torch.no_grad():
-            mean, cov = self.fit_gp(Xtest, full_cov=True, noiseless=False)
-            sd = cov.diag().sqrt()
-
-        plt.plot(Xtest, mean, zorder=1, c='k')
+        plt.plot(self.X_true, self.mean, zorder=1, c='k')
         if plot_sd:
-            plt.plot(Xtest, mean + 2*sd, zorder=0, c='r')
-            plt.plot(Xtest, mean - 2*sd, zorder=0, c='r')
+            plt.plot(self.X_true, self.mean + 2*self.std, zorder=0, c='r')
+            plt.plot(self.X_true, self.mean - 2*self.std, zorder=0, c='r')
 
         plt.plot(self.X_true, self.y_true, zorder=0, c='b')
 
 
+def background_noise(time: torch.Tensor, bckgd: torch.Tensor, bckgd_length: torch.Tensor, M: int, verbose: bool = False) -> torch.Tensor:
+    """
+    Fit a background noise model to the data
+
+    :param ndarray time: Time in hours
+    :param ndarray bckgd: Background time-series data
+    :param ndarray bckgd_length: Length of each background trace
+    :param int M: Count of background regions
+
+    :return: Standard deviation of the noise model, list of noise models
+    """
+    def noise_model(X: torch.Tensor, y: torch.Tensor) -> GaussianProcess:
+        process = GaussianProcess(pyro.contrib.gp.kernels.RBF, torch.optim.LBFGS)
+        priors = {
+            "lengthscale": PyroParam(torch.tensor(7.1), constraint=torch.distributions.constraints.greater_than(0.0)),
+        }
+
+        process.fit(X, y, pyro.infer.Trace_ELBO().differentiable_loss, priors=priors, num_steps=100)
+
+        return process
+
+
+    std_tensor = torch.zeros(M)
+    models = []
+
+    for i in range(M):
+        X = time[:bckgd_length[i]]
+        y = bckgd[:bckgd_length[i],i,None]  
+        y = y - torch.mean(y)
+
+        # remove y-dim
+        y = y.reshape(-1)
+        
+        m = noise_model(X, y)
+
+        models.append(m)
+        std_tensor[i] = torch.pow(m.fit_gp.kernel.variance, 0.5)
+
+    std = torch.mean(std_tensor)
+
+    if verbose:
+        print("Background noise model:")
+        print(f"Standard deviation: {std}")
+
+    return std, models
