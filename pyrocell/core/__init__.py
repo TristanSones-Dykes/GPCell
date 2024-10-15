@@ -3,6 +3,7 @@ from typing import Union, List
 
 # External library imports
 import matplotlib.pyplot as plt
+import torch
 
 # Internal imports
 from .. import utils, gp
@@ -28,12 +29,47 @@ class OscillatorDetector:
     def fit_models(self, verbose: bool = False):
         """
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
+
+        :param bool verbose: Print fitting progress
         """
+        if verbose:
+            print("Fitting background noise...")
 
         # background noise
         std, models = gp.background_noise(self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose)
         self.bckgd_std = std
         self.bckgd_models = models
+
+        if verbose:
+            print("\nDetrending and denoising cell data...")
+
+        # detrend and denoise cell data
+        self.mean_detrend, self.var_detrend, self.noise_detrend, self.LLR_list, self.BIC_list, self.OU_params, self.OUosc_params = [[torch.Tensor] * self.N for _ in range(7)]
+
+        for i in range(self.N):
+            # extract and normalize
+            X_curr = self.time[:self.y_length[i]]
+            y_curr = self.y_all[:self.y_length[i],i,None]
+            noise = self.bckgd_std / torch.std(y_curr)
+            y_curr = (y_curr - torch.mean(y_curr)) / torch.std(y_curr)
+
+            # remove y-dim
+            y_curr = y_curr.reshape(-1)
+
+            # detrend
+            mean, var, y_detrend = gp.detrend(X_curr, y_curr, 7.1)
+
+            if i == 1:
+                plt.plot(X_curr, y_curr, label="Original")
+                plt.plot(X_curr, y_detrend, label="Detrended")
+                plt.plot(X_curr, mean, label="Mean")
+                plt.legend()
+
+            self.mean_detrend[i] = mean
+            self.var_detrend[i] = var
+            self.noise_detrend[i] = noise
+
+
 
     def plot(self, target: Union[str, List[str]]):
         """

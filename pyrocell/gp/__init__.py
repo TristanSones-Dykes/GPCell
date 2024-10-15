@@ -199,12 +199,11 @@ def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float) -> Tuple[Tensor, T
 
     detrend_gp = noise_model(X, y, priors)
     mean, var = detrend_gp(X, full_cov=True, noiseless=False)
-    std = var.sqrt()
 
     y_detrended = y - mean
     y_detrended = y_detrended - torch.mean(y_detrended)
 
-    return mean, std, y_detrended
+    return mean, var, y_detrended
 
 
 def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, verbose: bool = False) -> Tuple[Tensor, list[GaussianProcess]]:
