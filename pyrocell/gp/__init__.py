@@ -1,37 +1,43 @@
-# Forwarding/lib imports
-import pyro.distributions
-import torch.distributions.constraints
-from . import kernels
+# Standard library imports
+from typing import Callable, Dict
 
-# Logic imports
-import pyro
-import pyro.contrib.gp.kernels
-import pyro.nn
-from pyro.nn.module import PyroParam
+# External library imports
 import torch
+import torch.optim as optim
 import matplotlib.pyplot as plt
+
+# External type imports
+from torch import Tensor
+from torch.optim.optimizer import Optimizer
+
+# Pyro-related imports
+import pyro
+from pyro.contrib.gp.models import GPRegression
+import pyro.contrib.gp.kernels as pyro_kernels
+from pyro.nn import PyroParam
+from pyro.distributions import constraints
 
 
 class GaussianProcess:
     """
     Gaussian Process class for fitting and evaluating parameters
     """
-    def __init__(self, kernel: pyro.contrib.gp.kernels.Isotropy, optimizer: torch.optim.Optimizer):
+    def __init__(self, kernel: pyro_kernels.Isotropy, optimizer: Optimizer):
         self.kernel = kernel
         """Kernel for the Gaussian Process"""
         self.optimizer = optimizer
         """Optimizer for the Gaussian Process"""
 
-    def fit(self, X: torch.Tensor, y: torch.Tensor, loss_fn: torch.nn.Module, lr: float = 0.01, num_steps: int = 1000, priors: dict = {}, verbose: bool = False):
+    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, num_steps: int = 1000, priors: Dict[str, object] = {}, verbose: bool = False):
         """
         Fit the Gaussian Process model, saves the model and training values for later use if needed.
 
-        :param torch.Tensor X: Input domain
-        :param torch.Tensor y: Target values
-        :param torch.nn.Module loss_fn: Loss function
+        :param Tensor X: Input domain
+        :param Tensor y: Target values
+        :param Callable loss_fn: Loss function
         :param float lr: Learning rate
         :param int num_steps: Number of steps
-        :param dict priors: Priors for the kernel parameters
+        :param Dict[str, object] priors: Priors for the kernel parameters
         :param bool verbose: Print training information
 
         :return: None
@@ -46,7 +52,7 @@ class GaussianProcess:
             setattr(kernel, param, prior)
 
         # gaussian regression
-        sgpr = pyro.contrib.gp.models.GPRegression(X, y, kernel, jitter=1.0e-5)
+        sgpr = GPRegression(X, y, kernel, jitter=1.0e-5)
         optimizer = self.optimizer(sgpr.parameters(), lr=lr)
 
         if verbose:
@@ -106,21 +112,22 @@ class GaussianProcess:
         plt.plot(self.X_true, self.y_true, zorder=0, c='b')
 
 
-def background_noise(time: torch.Tensor, bckgd: torch.Tensor, bckgd_length: torch.Tensor, M: int, verbose: bool = False) -> torch.Tensor:
+def background_noise(time: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, verbose: bool = False) -> torch.Tensor:
     """
     Fit a background noise model to the data
 
-    :param ndarray time: Time in hours
-    :param ndarray bckgd: Background time-series data
-    :param ndarray bckgd_length: Length of each background trace
+    :param Tensor time: Time in hours
+    :param Tensor bckgd: Background time-series data
+    :param Tensor bckgd_length: Length of each background trace
     :param int M: Count of background regions
+    :param bool verbose: Print information
 
     :return: Standard deviation of the noise model, list of noise models
     """
-    def noise_model(X: torch.Tensor, y: torch.Tensor) -> GaussianProcess:
-        process = GaussianProcess(pyro.contrib.gp.kernels.RBF, torch.optim.LBFGS)
+    def noise_model(X: Tensor, y: Tensor) -> GaussianProcess:
+        process = GaussianProcess(pyro_kernels.RBF, optim.LBFGS)
         priors = {
-            "lengthscale": PyroParam(torch.tensor(7.1), constraint=torch.distributions.constraints.greater_than(0.0)),
+            "lengthscale": PyroParam(torch.tensor(7.1), constraint=constraints.greater_than(0.0)),
         }
 
         process.fit(X, y, pyro.infer.Trace_ELBO().differentiable_loss, priors=priors, num_steps=100)

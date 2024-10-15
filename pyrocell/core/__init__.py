@@ -1,6 +1,11 @@
+# Standard library imports
 from typing import Union, List
-from .. import utils, gp
+
+# External library imports
 import matplotlib.pyplot as plt
+
+# Internal imports
+from .. import utils, gp
 
 class OscillatorDetector:
     def __init__(self, path: str = None):

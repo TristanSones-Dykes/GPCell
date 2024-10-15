@@ -1,5 +1,8 @@
+# External library imports
 import pandas as pd
 import torch
+
+# External type imports
 from torch import Tensor
 
 def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]:
@@ -12,13 +15,13 @@ def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, i
     :param str path: Path to the csv file.
 
     :return tuple: Split, formatted experimental data
-    - time: time in hours
-    - bckgd: background time-series data
-    - backgd_length: length of each background trace
-    - M: count of background regions
-    - y_all: cell time-series data
-    - y_length: length of each cell trace
-    - N: count of cell regions
+    - Tensor: time in hours
+    - Tensor: background time-series data
+    - Tensor: length of each background trace
+    - int: count of background regions
+    - Tensor: cell time-series data
+    - Tensor: length of each cell trace
+    - int: count of cell regions
     """
     df = pd.read_csv(path).fillna(0)  
     data_cols = [col for col in df if col.startswith('Cell')]
