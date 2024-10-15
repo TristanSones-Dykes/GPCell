@@ -1,5 +1,5 @@
 # Standard library imports
-from typing import Callable, Dict, Tuple
+from typing import Callable, Dict, Optional, Tuple
 
 # External library imports
 import torch
@@ -53,7 +53,7 @@ class GaussianProcess:
 
         return mean, var
 
-    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False):
+    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, noise: Optional[Tensor] = None, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False):
         """
         Fit the Gaussian Process model, saves the model and training values for later use if needed.
 
@@ -73,7 +73,6 @@ class GaussianProcess:
         if isinstance(self.kernel, type):
             kernel = self.kernel(input_dim = 1)
         else:
-            print("Using kernel object")
             kernel = self.kernel
 
         # set priors
@@ -81,7 +80,7 @@ class GaussianProcess:
             setattr(kernel, param, prior)
 
         # gaussian regression
-        sgpr = GPRegression(X, y, kernel, jitter=1.0e-5)
+        sgpr = GPRegression(X, y, kernel, noise=noise, jitter=1.0e-5)
         optimizer = self.optimizer(sgpr.parameters(), lr=lr)
 
         if verbose:
@@ -98,6 +97,7 @@ class GaussianProcess:
         else:
             closure = None
 
+        # training loop
         losses = []
         for i in range(num_steps):
             optimizer.zero_grad()
@@ -109,9 +109,15 @@ class GaussianProcess:
             if verbose and (i % 100 == 0 or i == num_steps-1):
                 print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
 
-        for param in priors.keys():
-            print(f"{param}: {getattr(sgpr.kernel, param).item()}")
-        
+        # display final trained parameters
+        if verbose:
+            for param in priors.keys():
+                print(f"{param}: {getattr(sgpr.kernel, param).item()}")
+
+        # calculate log posterior density
+        with torch.no_grad():
+            self.loss = loss_fn(sgpr.model, sgpr.guide)
+
         # save data vals for test and plotting
         self.X_true = X
         self.y_true = y
@@ -146,8 +152,13 @@ class OU(GaussianProcess):
     """
     Ornstein-Uhlenbeck process class
     """
-    def __init__(self):
-        super().__init__(Matern12, optim.LBFGS)
+    def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
+        # create kernel
+        kernel = Matern12(input_dim = 1)
+        for param, prior in priors.items():
+            setattr(kernel, param, prior)
+
+        super().__init__(kernel, optim.LBFGS)
 
 
 class OUosc(GaussianProcess):
@@ -156,8 +167,14 @@ class OUosc(GaussianProcess):
     """
     def __init__(self, ou_priors: Dict[str, PyroParam | PyroSample], osc_priors: Dict[str, PyroParam | PyroSample]):
         # create kernels
-        ou_kernel = Matern12(input_dim = 1, variance=ou_priors["variance"], lengthscale=ou_priors["lengthscale"])
-        osc_kernel = pyro_kernels.Cosine(input_dim = 1, lengthscale=osc_priors["lengthscale"])
+        ou_kernel = Matern12(input_dim = 1)
+        osc_kernel = pyro_kernels.Cosine(input_dim = 1)
+
+        # set priors
+        for param, prior in ou_priors.items():
+            setattr(ou_kernel, param, prior)
+        for param, prior in osc_priors.items():
+            setattr(osc_kernel, param, prior)
 
         # combine kernels
         kernel = pyro_kernels.Product(ou_kernel, osc_kernel)

@@ -3,7 +3,14 @@ from typing import Union, List
 
 # External library imports
 import matplotlib.pyplot as plt
+from sympy import Trace
 import torch
+
+# External type imports
+from pyro.infer import Trace_ELBO
+from pyro.nn.module import PyroSample
+from pyro.distributions import Uniform
+from torch import tensor
 
 # Internal imports
 from .. import utils, gp
@@ -46,6 +53,14 @@ class OscillatorDetector:
         # detrend and denoise cell data
         self.mean_detrend, self.var_detrend, self.noise_detrend, self.LLR_list, self.BIC_list, self.OU_params, self.OUosc_params = [[torch.Tensor] * self.N for _ in range(7)]
 
+        ou_priors = {
+            "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
+            "variance": PyroSample(Uniform(tensor(0.1), tensor(2.0)))
+        }
+        osc_priors = {
+            "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(4.0)))
+        }
+
         for i in range(self.N):
             # extract and normalize
             X_curr = self.time[:self.y_length[i]]
@@ -56,14 +71,20 @@ class OscillatorDetector:
             # remove y-dim
             y_curr = y_curr.reshape(-1)
 
-            # detrend
+            # detrend and plot
             mean, var, y_detrend = gp.detrend(X_curr, y_curr, 7.1)
-
-            if i == 1:
+            if verbose and i == 1:
                 plt.plot(X_curr, y_curr, label="Original")
                 plt.plot(X_curr, y_detrend, label="Detrended")
                 plt.plot(X_curr, mean, label="Mean")
                 plt.legend()
+
+            # fit OU, OU+Oscillator
+            ou = gp.OU(ou_priors)
+            ouosc = gp.OUosc(ou_priors, osc_priors)
+
+            ou.fit(X_curr, y_detrend, Trace_ELBO().differentiable_loss)
+            ouosc.fit(X_curr, y_detrend, Trace_ELBO().differentiable_loss)
 
             self.mean_detrend[i] = mean
             self.var_detrend[i] = var
