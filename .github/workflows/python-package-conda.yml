@@ -31,3 +31,13 @@ jobs:
     - name: Compile pdoc
       run: |
         pdoc -o docs pyrocell
+    - name: Upload GitHub Pages artifact
+      uses: actions/upload-pages-artifact@v3.0.1
+      with:
+        # Artifact name
+        name: Pyrocell
+        # Path of the directory containing the static assets.
+        path: docs/
+        # Duration after which artifact will expire in days.
+        retention-days: 30
+          
