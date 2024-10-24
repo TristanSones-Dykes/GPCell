@@ -7,7 +7,7 @@ permissions:
   pages: write
 
 jobs:
-  build-deploy-docs:
+  build-docs:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
@@ -44,6 +44,11 @@ jobs:
         path: docs/
         # Duration after which artifact will expire in days.
         retention-days: 10
+  deploy-docs:
+    runs-on: ubuntu-latest
+    environment:
+      name: pyrocell-pages
+    steps:
     - name: Deploy GitHub Pages site
       uses: actions/deploy-pages@v4.0.5
       with:
