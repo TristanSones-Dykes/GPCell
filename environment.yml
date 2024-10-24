@@ -1,0 +1,19 @@
+name: Pyrocell
+channels:
+  - bioconda
+  - defaults
+  - conda-forge
+dependencies:
+  - pytorch::pytorch
+  - torchvision
+  - torchaudio
+  - pyro-ppl
+  - ca-certificates
+  - certifi
+  - openssl
+  - numpy
+  - matplotlib
+  - jupyter
+  - pandas
+  - pdoc
+prefix: /Users/tristansones-dykes/mambaforge/envs/Pyrocell
