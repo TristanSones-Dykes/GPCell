@@ -35,7 +35,7 @@ class GaussianProcess:
         self.optimizer = optimizer
         """Optimizer for the Gaussian Process"""
 
-    def __call__(self, X: Tensor, full_cov: bool = True, noiseless: bool = False) -> Tuple[Tensor, Tensor]:
+    def __call__(self, X: Tensor, full_cov: bool = False, noiseless: bool = False) -> Tuple[Tensor, Tensor]:
         """
         Evaluate the Gaussian Process on the input domain
 
@@ -48,12 +48,13 @@ class GaussianProcess:
         with torch.no_grad():
             mean, cov = self.fit_gp(X, full_cov=full_cov, noiseless=noiseless)
 
-        if full_cov:
+        if not full_cov:
             var = cov.diag()
+            return mean, var
 
-        return mean, var
+        return mean, cov
 
-    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, noise: Optional[Tensor] = None, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False):
+    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, noise: Optional[Tensor] = None, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False) -> bool:
         """
         Fit the Gaussian Process model, saves the model and training values for later use if needed.
 
@@ -65,7 +66,7 @@ class GaussianProcess:
         :param Dict[str, PyroPrior] priors: Priors for the kernel parameters
         :param bool verbose: Print training information
 
-        :return: None
+        :return bool: Success status
         """
         pyro.clear_param_store()
 
@@ -83,10 +84,6 @@ class GaussianProcess:
         sgpr = GPRegression(X, y, kernel, noise=noise, jitter=1.0e-5)
         optimizer = self.optimizer(sgpr.parameters(), lr=lr)
 
-        if verbose:
-            print(sgpr)
-            print(optimizer)
-
         # check if closure is needed
         if optimizer.__class__.__name__ == "LBFGS":
             def closure():
@@ -97,17 +94,18 @@ class GaussianProcess:
         else:
             closure = None
 
-        # training loop
-        losses = []
-        for i in range(num_steps):
-            optimizer.zero_grad()
-            loss = loss_fn(sgpr.model, sgpr.guide)
-            loss.backward()
-            optimizer.step(closure)
+        try:
+            for i in range(num_steps):
+                optimizer.zero_grad()
+                loss = loss_fn(sgpr.model, sgpr.guide)
+                loss.backward()
+                optimizer.step(closure)
 
-            losses.append(loss.item())
-            if verbose and (i % 100 == 0 or i == num_steps-1):
-                print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
+                #if verbose and (i % 100 == 0 or i == num_steps-1):
+                #    print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
+        except torch.linalg.LinAlgError as e:
+            print(f"Lapack error code: {e}")
+            return False
 
         # display final trained parameters
         if verbose:
@@ -118,20 +116,24 @@ class GaussianProcess:
         with torch.no_grad():
             self.loss = loss_fn(sgpr.model, sgpr.guide)
 
-        # save data vals for test and plotting
-        self.X_true = X
-        self.y_true = y
-        
+        # mean and variance
         with torch.no_grad():
             self.mean, self.cov = sgpr(X, full_cov=True, noiseless=False)
-            self.std = self.cov.diag().sqrt()
+            self.var = self.cov.diag()
 
+        self.X_true = X
+        self.y_true = y
         self.fit_gp = sgpr
-        self.params = sgpr.parameters()
 
-    def test_plot(self, plot_sd: bool = False):
+        return True
+
+    def test_plot(self, X: Optional[Tensor] = None, y_true: Optional[Tensor] = None, plot_sd: bool = False):
         """
         Create a test plot of the fitted model on the training data
+
+        :param Tensor X: Input domain
+        :param Tensor y_true: True target values
+        :param bool plot_sd: Plot standard deviation
         
         :return: None
         """
@@ -139,13 +141,22 @@ class GaussianProcess:
         if not hasattr(self, "fit_gp"):
             raise AttributeError("Please fit the model first")
         
-        # plot
-        plt.plot(self.X_true, self.mean, zorder=1, c='k')
-        if plot_sd:
-            plt.plot(self.X_true, self.mean + 2*self.std, zorder=0, c='r')
-            plt.plot(self.X_true, self.mean - 2*self.std, zorder=0, c='r')
+        # default X and y_true values
+        if X is None:
+            X = self.X_true
+            mean, std = self.mean, self.var.sqrt()
 
-        plt.plot(self.X_true, self.y_true, zorder=0, c='b')
+        if y_true is None:
+            y_true = self.y_true
+
+        # plot
+        plt.plot(X, mean, zorder=1, c='k', label='Fit GP')
+        if plot_sd:
+            plt.plot(X, mean + 2*std, zorder=0, c='r')
+            plt.plot(X, mean - 2*std, zorder=0, c='r')
+
+        if y_true is not None:
+            plt.plot(X, y_true, zorder=0, c='b', label='True data')
 
 
 class OU(GaussianProcess):
@@ -181,26 +192,24 @@ class OUosc(GaussianProcess):
 
         super().__init__(kernel, optim.LBFGS)
 
+class NoiseModel(GaussianProcess):
+    """
+    Noise model class
+    """
+    def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
+        # create kernel
+        kernel = pyro_kernels.RBF(input_dim = 1)
+        for param, prior in priors.items():
+            setattr(kernel, param, prior)
+
+        super().__init__(kernel, optim.LBFGS)
+
 
 # ------------------------------- #
 # --- Gaussian Process helpers --- #
 # ------------------------------- #
 
-def noise_model(X: Tensor, y: Tensor, priors: Dict[str, PyroParam | PyroSample]) -> GaussianProcess:
-    """
-    Fit a squared exponential kernel to the data
-
-    :param Tensor X: Input domain
-    :param Tensor y: Target values
-    :param Dict[str, PyroPrior] priors: Priors for the kernel parameters
-    """
-    process = GaussianProcess(pyro_kernels.RBF, optim.LBFGS)
-    process.fit(X, y, pyro.infer.Trace_ELBO().differentiable_loss, priors=priors, num_steps=100)
-
-    return process
-
-
-def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float) -> Tuple[Tensor, Tensor, Tensor]:
+def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float, verbose: bool = False) -> Optional[Tuple[Tensor, GaussianProcess]]:
     """
     Detrend stochastic process using RBF process
 
@@ -208,19 +217,21 @@ def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float) -> Tuple[Tensor, T
     :param Tensor y: Target values
     :param float detrend_lengthscale: Lengthscale of the detrending process
 
-    :return Tuple[Tensor, Tensor, Tensor]: mean, variance, detrended values
+    :return Tuple[Tensor, Tensor, Tensor]: mean, variance, detrended values or None
     """
     priors = {
         "lengthscale": PyroParam(torch.tensor(detrend_lengthscale), constraint=constraints.greater_than(0.0)),
     }
 
-    detrend_gp = noise_model(X, y, priors)
-    mean, var = detrend_gp(X, full_cov=True, noiseless=False)
+    noise_model = NoiseModel(priors)
+    success = noise_model.fit(X, y, pyro.infer.Trace_ELBO().differentiable_loss, num_steps=15, verbose=verbose)
 
-    y_detrended = y - mean
-    y_detrended = y_detrended - torch.mean(y_detrended)
+    if not success:
+        return None
 
-    return mean, var, y_detrended
+    y_detrended = y - noise_model.mean
+
+    return y_detrended, noise_model
 
 
 def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, verbose: bool = False) -> Tuple[Tensor, list[GaussianProcess]]:
@@ -228,7 +239,7 @@ def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, ver
     Fit a background noise model to the data
 
     :param Tensor X: Input domain
-    :param Tensor bckgd: Background X-series data
+    :param Tensor bckgd: Background traces
     :param Tensor bckgd_length: Length of each background trace
     :param int M: Count of background regions
     :param bool verbose: Print information
@@ -244,21 +255,20 @@ def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, ver
 
     for i in range(M):
         X_curr = X[:bckgd_length[i]]
-        y_curr = bckgd[:bckgd_length[i],i,None]  
-        y_curr = y_curr - torch.mean(y_curr)
-
-        # remove y-dim
-        y_curr = y_curr.reshape(-1)
+        y_curr = bckgd[:bckgd_length[i],i]
         
-        m = noise_model(X_curr, y_curr, priors)
+        m = NoiseModel(priors)
+        success = m.fit(X_curr, y_curr, pyro.infer.Trace_ELBO().differentiable_loss, num_steps=100, verbose=verbose)
+
+        if not success:
+            raise RuntimeError(f"Failed to fit background noise model {i}")
 
         models.append(m)
-        std_tensor[i] = torch.pow(m.fit_gp.kernel.variance, 0.5)
+        std_tensor[i] = torch.sqrt(m.fit_gp.kernel.variance)
 
     std = torch.mean(std_tensor)
 
-    if verbose:
-        print("Background noise model:")
-        print(f"Standard deviation: {std}")
+    print("Background noise model:")
+    print(f"Standard deviation: {std}")
 
     return std, models
