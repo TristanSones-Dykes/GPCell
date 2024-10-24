@@ -45,6 +45,7 @@ jobs:
         # Duration after which artifact will expire in days.
         retention-days: 10
   deploy-docs:
+    needs: build-docs
     runs-on: ubuntu-latest
     environment:
       name: pyrocell-pages
