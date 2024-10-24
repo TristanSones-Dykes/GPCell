@@ -2,8 +2,12 @@ name: Conda package with generated docs
 
 on: [push]
 
+permissions:
+  id-token: write
+  pages: write
+
 jobs:
-  build-linux:
+  build-deploy-docs:
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 5
