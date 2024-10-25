@@ -1,21 +1,18 @@
 # Standard library imports
 from math import ceil, sqrt
-from typing import Union, List
 
 # External library imports
-from matplotlib.pylab import f
 import matplotlib.pyplot as plt
-from sympy import Trace, plot
-import torch
 
 # External type imports
-from pyro.infer import Trace_ELBO
 from pyro.nn.module import PyroSample
 from pyro.distributions import Uniform
-from torch import tensor
+from pyro.infer import Trace_ELBO
+from torch import no_grad, tensor, Tensor, std, mean
 
 # Internal imports
-from .. import utils, gp
+from .. import utils
+from ..gp import GaussianProcess, OU, OUosc, background_noise, detrend
 
 class OscillatorDetector:
     def __init__(self, path: str = None):
@@ -66,15 +63,13 @@ class OscillatorDetector:
         # centre all data
         for i in range(self.N):
             y_curr = self.y_all[:self.y_length[i],i]
-            y_curr -= torch.mean(y_curr)
+            y_curr -= mean(y_curr)
         for i in range(self.M):
             y_curr = self.bckgd[:self.bckgd_length[i],i]
-            y_curr -= torch.mean(y_curr)
+            y_curr -= mean(y_curr)
 
         # --- background noise --- #
-        std, models = gp.background_noise(self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose)
-        self.bckgd_std = std
-        self.bckgd_models = models
+        self.bckgd_std, self.bckgd_models = background_noise(self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose)
 
         # plot and start next step
         if "background" in plots:
@@ -84,8 +79,8 @@ class OscillatorDetector:
 
 
         # --- detrend and denoise cell data --- #
-        self.model_detrend = [gp.GaussianProcess] * self.N
-        self.y_detrend, self.noise_detrend, self.LLR_list, self.BIC_list, self.OU_params, self.OUosc_params = [[torch.Tensor] * self.N for _ in range(6)]
+        self.model_detrend = [GaussianProcess] * self.N
+        self.y_detrend, self.noise_detrend, self.LLR_list, self.BIC_list, self.OU_params, self.OUosc_params = [[Tensor] * self.N for _ in range(6)]
 
         ou_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
@@ -102,11 +97,11 @@ class OscillatorDetector:
             y_curr = self.y_all[:self.y_length[i],i]
 
             # normalise and reshape inplace
-            noise = self.bckgd_std / torch.std(y_curr)
-            y_curr = y_curr / torch.std(y_curr)
+            noise = self.bckgd_std / std(y_curr)
+            y_curr = y_curr / std(y_curr)
 
             # detrend
-            res = gp.detrend(X_curr, y_curr, 7.1, verbose=verbose)
+            res = detrend(X_curr, y_curr, 7.1, verbose=verbose)
 
             # skip if failed
             if res is None:
@@ -114,11 +109,11 @@ class OscillatorDetector:
             y_detrended, noise_model = res
             
             # fit OU, OU+Oscillator
-            """ou = gp.OU(ou_priors)
-            ouosc = gp.OUosc(ou_priors, osc_priors)
+            ou = OU(ou_priors)
+            ouosc = OUosc(ou_priors, osc_priors)
 
-            ou.fit(X_curr, y_detrend, Trace_ELBO().differentiable_loss)
-            ouosc.fit(X_curr, y_detrend, Trace_ELBO().differentiable_loss)"""
+            ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose)
+            ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose)
 
             self.y_detrend[i] = y_detrended
             self.model_detrend[i] = noise_model
@@ -161,7 +156,7 @@ class OscillatorDetector:
                 # plot
                 plt.subplot(dim, dim, i+1)
                 m.test_plot()
-                with torch.no_grad():
+                with no_grad():
                     plt.plot(self.time[:self.y_length[i]], y_detrended, label="Detrended")
 
                 plt.title(f"Cell {i+1}")

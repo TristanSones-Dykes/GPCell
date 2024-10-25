@@ -1,32 +1,33 @@
 # External library imports
-import torch
-import pyro.contrib.gp.kernels as pyro_kernels
+from typing import List, Optional
+from torch import Tensor, exp
+from pyro.contrib.gp.kernels import Isotropy
 
 # Isotropic kernels
-class Matern12(pyro_kernels.Isotropy):
+class Matern12(Isotropy):
     """
     Matern 1/2 kernel, non-smooth and non-differentiable
     """
-    def __init__(self, input_dim, variance=None, lengthscale=None, active_dims=None):
+    def __init__(self, input_dim: int, variance: Optional[Tensor] = None, lengthscale: Optional[Tensor] = None, active_dims: Optional[List] = None):
         """
         :param int input_dim: Dimension of input
-        :param torch.Tensor variance: Variance of the kernel
-        :param torch.Tensor lengthscale: Lengthscale of the kernel
-        :param list active_dims: Active dimensions
+        :param Tensor variance: Variance of the kernel (optional)
+        :param Tensor lengthscale: Lengthscale of the kernel (optional)
+        :param list active_dims: Active dimensions (optional)
         """
         super().__init__(input_dim, variance, lengthscale, active_dims)
 
-    def forward(self, X, Z=None, diag=False):
+    def forward(self, X: Tensor, Z: Optional[Tensor] = None, diag: bool = False):
         """
         Compute the covariance matrix of kernel on inputs X and Z
         
-        :param torch.Tensor X: Input tensor
-        :param torch.Tensor Z: Input tensor
+        :param Tensor X: Input tensor
+        :param Tensor Z: Input tensor (optional)
         :param bool diag: Return the diagonal of the covariance matrix
         """
         if diag:
             return self._diag(X)
 
         r = self._scaled_dist(X, Z)
-        return self.variance * torch.exp(-r)
+        return self.variance * exp(-r)
 

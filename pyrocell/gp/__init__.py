@@ -2,20 +2,24 @@
 from typing import Callable, Dict, Optional, Tuple
 
 # External library imports
-import torch
-import torch.optim as optim
 import matplotlib.pyplot as plt
 
 # External type imports
-from torch import Tensor
-from torch.optim.optimizer import Optimizer
+from torch import Tensor, tensor, no_grad, zeros, mean, sqrt
+from torch.optim import LBFGS, Optimizer
+from torch.linalg import LinAlgError
 
-# Pyro-related imports
-import pyro
+# --- Pyro-related imports --- #
+
+# Gaussian processes
 from pyro.contrib.gp.models import GPRegression
-import pyro.contrib.gp.kernels as pyro_kernels
+from pyro.contrib.gp.kernels import Isotropy, Cosine, RBF, Product
+
+# Primitives and utilities
 from pyro.nn import PyroParam, PyroSample
-from pyro.distributions import constraints
+from pyro.distributions.constraints import greater_than
+from pyro.infer import Trace_ELBO
+from pyro import clear_param_store
 
 # Internal imports
 from pyrocell.gp.kernels import Matern12
@@ -29,7 +33,7 @@ class GaussianProcess:
     """
     Gaussian Process class for fitting and evaluating parameters
     """
-    def __init__(self, kernel: pyro_kernels.Isotropy, optimizer: Optimizer):
+    def __init__(self, kernel: Isotropy, optimizer: Optimizer):
         self.kernel = kernel
         """Kernel for the Gaussian Process"""
         self.optimizer = optimizer
@@ -45,7 +49,7 @@ class GaussianProcess:
 
         :return Tuple[Tensor, Tensor]: Mean and standard deviation
         """
-        with torch.no_grad():
+        with no_grad():
             mean, cov = self.fit_gp(X, full_cov=full_cov, noiseless=noiseless)
 
         if not full_cov:
@@ -68,7 +72,7 @@ class GaussianProcess:
 
         :return bool: Success status
         """
-        pyro.clear_param_store()
+        clear_param_store()
 
         # check if kernel is class or object
         if isinstance(self.kernel, type):
@@ -103,7 +107,7 @@ class GaussianProcess:
 
                 #if verbose and (i % 100 == 0 or i == num_steps-1):
                 #    print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
-        except torch.linalg.LinAlgError as e:
+        except LinAlgError as e:
             print(f"Lapack error code: {e}")
             return False
 
@@ -113,11 +117,11 @@ class GaussianProcess:
                 print(f"{param}: {getattr(sgpr.kernel, param).item()}")
 
         # calculate log posterior density
-        with torch.no_grad():
+        with no_grad():
             self.loss = loss_fn(sgpr.model, sgpr.guide)
 
         # mean and variance
-        with torch.no_grad():
+        with no_grad():
             self.mean, self.cov = sgpr(X, full_cov=True, noiseless=False)
             self.var = self.cov.diag()
 
@@ -169,7 +173,7 @@ class OU(GaussianProcess):
         for param, prior in priors.items():
             setattr(kernel, param, prior)
 
-        super().__init__(kernel, optim.LBFGS)
+        super().__init__(kernel, LBFGS)
 
 
 class OUosc(GaussianProcess):
@@ -179,7 +183,7 @@ class OUosc(GaussianProcess):
     def __init__(self, ou_priors: Dict[str, PyroParam | PyroSample], osc_priors: Dict[str, PyroParam | PyroSample]):
         # create kernels
         ou_kernel = Matern12(input_dim = 1)
-        osc_kernel = pyro_kernels.Cosine(input_dim = 1)
+        osc_kernel = Cosine(input_dim = 1)
 
         # set priors
         for param, prior in ou_priors.items():
@@ -188,9 +192,9 @@ class OUosc(GaussianProcess):
             setattr(osc_kernel, param, prior)
 
         # combine kernels
-        kernel = pyro_kernels.Product(ou_kernel, osc_kernel)
+        kernel = Product(ou_kernel, osc_kernel)
 
-        super().__init__(kernel, optim.LBFGS)
+        super().__init__(kernel, LBFGS)
 
 class NoiseModel(GaussianProcess):
     """
@@ -198,11 +202,11 @@ class NoiseModel(GaussianProcess):
     """
     def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
         # create kernel
-        kernel = pyro_kernels.RBF(input_dim = 1)
+        kernel = RBF(input_dim = 1)
         for param, prior in priors.items():
             setattr(kernel, param, prior)
 
-        super().__init__(kernel, optim.LBFGS)
+        super().__init__(kernel, LBFGS)
 
 
 # ------------------------------- #
@@ -220,11 +224,11 @@ def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float, verbose: bool = Fa
     :return Tuple[Tensor, Tensor, Tensor]: mean, variance, detrended values or None
     """
     priors = {
-        "lengthscale": PyroParam(torch.tensor(detrend_lengthscale), constraint=constraints.greater_than(0.0)),
+        "lengthscale": PyroParam(tensor(detrend_lengthscale), constraint=greater_than(0.0)),
     }
 
     noise_model = NoiseModel(priors)
-    success = noise_model.fit(X, y, pyro.infer.Trace_ELBO().differentiable_loss, num_steps=15, verbose=verbose)
+    success = noise_model.fit(X, y, Trace_ELBO().differentiable_loss, num_steps=15, verbose=verbose)
 
     if not success:
         return None
@@ -247,10 +251,10 @@ def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, ver
     :return: Standard deviation of the noise model, list of noise models
     """
     priors = {
-        "lengthscale": PyroParam(torch.tensor(7.1), constraint=constraints.greater_than(0.0)),
+        "lengthscale": PyroParam(tensor(7.1), constraint=greater_than(0.0)),
     }
 
-    std_tensor = torch.zeros(M)
+    std_tensor = zeros(M)
     models = []
 
     for i in range(M):
@@ -258,15 +262,15 @@ def background_noise(X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, ver
         y_curr = bckgd[:bckgd_length[i],i]
         
         m = NoiseModel(priors)
-        success = m.fit(X_curr, y_curr, pyro.infer.Trace_ELBO().differentiable_loss, num_steps=100, verbose=verbose)
+        success = m.fit(X_curr, y_curr, Trace_ELBO().differentiable_loss, num_steps=100, verbose=verbose)
 
         if not success:
             raise RuntimeError(f"Failed to fit background noise model {i}")
 
         models.append(m)
-        std_tensor[i] = torch.sqrt(m.fit_gp.kernel.variance)
+        std_tensor[i] = sqrt(m.fit_gp.kernel.variance)
 
-    std = torch.mean(std_tensor)
+    std = mean(std_tensor)
 
     print("Background noise model:")
     print(f"Standard deviation: {std}")
