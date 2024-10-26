@@ -139,7 +139,11 @@ class OscillatorDetector:
             self.noise_detrend[i] = noise
 
         # calculate number of cells with better oscillator fits
-        
+        oscillators = 0
+        for i in range(self.N):
+            if self.OUosc_elbos[i] > self.OU_elbos[i]:
+                oscillators += 1
+        print(f"According to ELBO, there are {oscillators} oscillating cells")
 
         if "detrend" in plots:
             self.plot("detrend")
