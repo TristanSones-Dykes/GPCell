@@ -13,7 +13,7 @@ from torch.linalg import LinAlgError
 
 # Gaussian processes
 from pyro.contrib.gp.models import GPRegression
-from pyro.contrib.gp.kernels import Isotropy, Cosine, RBF, Product
+from pyro.contrib.gp.kernels import Isotropy, Cosine, RBF, Product, Exponential
 
 # Primitives and utilities
 from pyro.nn import PyroParam, PyroSample
@@ -58,16 +58,18 @@ class GaussianProcess:
 
         return mean, cov
 
-    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, noise: Optional[Tensor] = None, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False) -> bool:
+    def fit(self, X: Tensor, y: Tensor, loss_fn: Callable[..., Tensor], lr: float = 0.01, noise: Optional[Tensor] = None, jitter: float = 1.0e-5, num_steps: int = 1000, priors: Dict[str, PyroParam | PyroSample] = {}, verbose: bool = False) -> bool:
         """
         Fit the Gaussian Process model, saves the model and training values for later use if needed.
 
         :param Tensor X: Input domain
         :param Tensor y: Target values
-        :param Callable loss_fn: Loss function
+        :param Callable[..., Tensor] loss_fn: Loss function
         :param float lr: Learning rate
+        :param Tensor noise: Variance of Gaussian noise of the model
+        :param float jitter: Positive term to help Cholesky decomposition
         :param int num_steps: Number of steps
-        :param Dict[str, PyroPrior] priors: Priors for the kernel parameters
+        :param dict[str, PyroParam | PyroSample] priors: Priors for the kernel parameters
         :param bool verbose: Print training information
 
         :return bool: Success status
@@ -85,7 +87,7 @@ class GaussianProcess:
             setattr(kernel, param, prior)
 
         # gaussian regression
-        sgpr = GPRegression(X, y, kernel, noise=noise, jitter=1.0e-5)
+        sgpr = GPRegression(X, y, kernel, noise=noise, jitter=jitter)
         optimizer = self.optimizer(sgpr.parameters(), lr=lr)
 
         # check if closure is needed
@@ -169,7 +171,7 @@ class OU(GaussianProcess):
     """
     def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
         # create kernel
-        kernel = Matern12(input_dim = 1)
+        kernel = Exponential(input_dim = 1)
         for param, prior in priors.items():
             setattr(kernel, param, prior)
 
@@ -182,7 +184,7 @@ class OUosc(GaussianProcess):
     """
     def __init__(self, ou_priors: Dict[str, PyroParam | PyroSample], osc_priors: Dict[str, PyroParam | PyroSample]):
         # create kernels
-        ou_kernel = Matern12(input_dim = 1)
+        ou_kernel = Exponential(input_dim = 1)
         osc_kernel = Cosine(input_dim = 1)
 
         # set priors

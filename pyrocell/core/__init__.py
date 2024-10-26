@@ -18,12 +18,27 @@ class OscillatorDetector:
     def __init__(self, path: str = None):
         """
         Initialize the Oscillator Detector
-        
+
         :param str path: Path to the csv file
         """
         if path is not None:
             self.time, self.bckgd, self.bckgd_length, self.M, self.y_all, self.y_length, self.N = utils.load_data(path)
             self.allowed = set(["background", "detrend"])
+
+    def __str__(self):
+        # create a summary of the models and data
+        out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
+        if hasattr(self, "bckgd_std"):
+            # display overall std and fitted models
+            out += f"\nBackground noise std: {self.bckgd_std}"
+            out += f"\nBackground noise models: {self.bckgd_models}\n"
+
+        if hasattr(self, "model_detrend"):
+            # display detrended data and models
+            out += f"\nDetrended noise models: {self.model_detrend}"
+
+        return out
+
 
     def load_data(self, path: str):
         """
@@ -40,7 +55,7 @@ class OscillatorDetector:
         :param bool verbose: Print fitting progress
         """
         # default arguments
-        default_kwargs = {"verbose": False, "plots": []}
+        default_kwargs = {"verbose": False, "plots": [], "jitter": 1.0e-5}
         for key, value in default_kwargs.items():
             if key not in kwargs:
                 kwargs[key] = value
@@ -48,6 +63,7 @@ class OscillatorDetector:
         # unpack arguments
         verbose = kwargs["verbose"]
         plots = set(kwargs["plots"])
+        jitter = kwargs["jitter"]
 
         # check if plots are valid and print data
         if not plots.issubset(self.allowed):
@@ -80,7 +96,7 @@ class OscillatorDetector:
 
         # --- detrend and denoise cell data --- #
         self.model_detrend = [GaussianProcess] * self.N
-        self.y_detrend, self.noise_detrend, self.LLR_list, self.BIC_list, self.OU_params, self.OUosc_params = [[Tensor] * self.N for _ in range(6)]
+        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_elbos, self.OUosc_elbos = [[Tensor] * self.N for _ in range(5)]
 
         ou_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
@@ -110,14 +126,20 @@ class OscillatorDetector:
             
             # fit OU, OU+Oscillator
             ou = OU(ou_priors)
+            ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            self.OU_elbos[i] = ou.loss
+
             ouosc = OUosc(ou_priors, osc_priors)
+            ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            self.OUosc_elbos[i] = ouosc.loss
 
-            ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose)
-            ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose)
-
+            
             self.y_detrend[i] = y_detrended
             self.model_detrend[i] = noise_model
             self.noise_detrend[i] = noise
+
+        # calculate number of cells with better oscillator fits
+        
 
         if "detrend" in plots:
             self.plot("detrend")
@@ -148,7 +170,7 @@ class OscillatorDetector:
 
             for i in range(self.N):
                 # check properly fit
-                if self.model_detrend[i] is None:
+                if not isinstance(self.model_detrend[i], GaussianProcess):
                     continue
 
                 m, y_detrended = self.model_detrend[i], self.y_detrend[i]
