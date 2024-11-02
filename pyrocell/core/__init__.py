@@ -5,8 +5,9 @@ from math import ceil, sqrt
 import matplotlib.pyplot as plt
 
 # External type imports
-from pyro.nn.module import PyroSample
+from pyro.nn.module import PyroSample, PyroParam
 from pyro.distributions import Uniform
+from pyro.distributions.constraints import greater_than
 from pyro.infer import Trace_ELBO
 from torch import no_grad, tensor, Tensor, std, mean
 
@@ -96,14 +97,17 @@ class OscillatorDetector:
 
         # --- detrend and denoise cell data --- #
         self.model_detrend = [GaussianProcess] * self.N
-        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_elbos, self.OUosc_elbos = [[Tensor] * self.N for _ in range(5)]
+        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_LL, self.OUosc_LL = [[Tensor] * self.N for _ in range(5)]
 
         ou_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
             "variance": PyroSample(Uniform(tensor(0.1), tensor(2.0)))
+            #"lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0)),
+            #"variance" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
         }
         osc_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(4.0)))
+            #"lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
         }
 
         # loop through and fit models
@@ -126,24 +130,19 @@ class OscillatorDetector:
             
             # fit OU, OU+Oscillator
             ou = OU(ou_priors)
-            ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
-            self.OU_elbos[i] = ou.loss
+            success = ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            if success:
+                self.OU_LL[i] = ou.log_likelihood()
 
             ouosc = OUosc(ou_priors, osc_priors)
-            ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
-            self.OUosc_elbos[i] = ouosc.loss
+            success = ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            if success:
+                self.OUosc_LL[i] = ouosc.log_likelihood()
 
             
             self.y_detrend[i] = y_detrended
             self.model_detrend[i] = noise_model
             self.noise_detrend[i] = noise
-
-        # calculate number of cells with better oscillator fits
-        oscillators = 0
-        for i in range(self.N):
-            if self.OUosc_elbos[i] > self.OU_elbos[i]:
-                oscillators += 1
-        print(f"According to ELBO, there are {oscillators} oscillating cells")
 
         if "detrend" in plots:
             self.plot("detrend")

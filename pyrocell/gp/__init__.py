@@ -5,7 +5,8 @@ from typing import Callable, Dict, Optional, Tuple
 import matplotlib.pyplot as plt
 
 # External type imports
-from torch import Tensor, tensor, no_grad, zeros, mean, sqrt
+from torch import Tensor, clone, tensor, no_grad, zeros, mean, sqrt, eye, matmul, logdet, log, pi
+from torch.linalg import solve
 from torch.optim import LBFGS, Optimizer
 from torch.linalg import LinAlgError
 
@@ -33,11 +34,13 @@ class GaussianProcess:
     """
     Gaussian Process class for fitting and evaluating parameters
     """
-    def __init__(self, kernel: Isotropy, optimizer: Optimizer):
+    def __init__(self, kernel: Isotropy, optimizer: Optimizer, variance_loc: str = ["variance"]):
         self.kernel = kernel
         """Kernel for the Gaussian Process"""
         self.optimizer = optimizer
         """Optimizer for the Gaussian Process"""
+        self.variance_loc = variance_loc
+        """Location of the variance parameter in the kernel"""
 
     def __call__(self, X: Tensor, full_cov: bool = False, noiseless: bool = False) -> Tuple[Tensor, Tensor]:
         """
@@ -132,7 +135,41 @@ class GaussianProcess:
         self.fit_gp = sgpr
 
         return True
+    
+    def log_likelihood(self, y: Optional[Tensor] = None) -> Tensor:
+        """
+        Calculates the log-marginal likelihood for the Gaussian process.
+        If no target values are input, calculates log likelihood for data is was it on.
 
+        :param Tensor y: Observed target values (optional)
+        :return Tensor: Log-likelihood
+        """
+        # no y input -> use fitted mean and cov
+        if y is None:
+            y, mean, K = clone(self.y_true), clone(self.mean), clone(self.cov)
+        else:
+            # evaluate new mean and cov
+            mean, K = self.fit_gp(self.X_true, y)
+
+        with no_grad():
+            # add noise variance to kernel diagonal
+            noise = getattr(self.fit_gp.kernel, self.variance_loc[0])
+            for i in range(1, len(self.variance_loc)):
+                noise = getattr(noise, self.variance_loc[i])
+
+            K_with_noise = K + noise.item() * eye(K.size(0))
+
+            # residuals
+            residual = y - mean
+
+            # Compute terms for log-marginal likelihood
+            term1 = -0.5 * matmul(residual.T, solve(K_with_noise, residual))
+            term2 = -0.5 * logdet(K_with_noise)
+            term3 = -0.5 * len(y) * log(tensor(2 * pi))
+
+        return term1 + term2 + term3
+
+    
     def test_plot(self, X: Optional[Tensor] = None, y_true: Optional[Tensor] = None, plot_sd: bool = False):
         """
         Create a test plot of the fitted model on the training data
@@ -195,8 +232,8 @@ class OUosc(GaussianProcess):
 
         # combine kernels
         kernel = Product(ou_kernel, osc_kernel)
-
-        super().__init__(kernel, LBFGS)
+        
+        super().__init__(kernel, LBFGS, variance_loc=["kern0", "variance_map"])
 
 class NoiseModel(GaussianProcess):
     """
@@ -226,7 +263,7 @@ def detrend(X: Tensor, y: Tensor, detrend_lengthscale: float, verbose: bool = Fa
     :return Tuple[Tensor, Tensor, Tensor]: mean, variance, detrended values or None
     """
     priors = {
-        "lengthscale": PyroParam(tensor(detrend_lengthscale), constraint=greater_than(0.0)),
+        "lengthscale": PyroParam(tensor(detrend_lengthscale), constraint=greater_than(7.0)),
     }
 
     noise_model = NoiseModel(priors)
