@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable, List, Optional, Tuple, cast
+from typing import Callable, List, Optional, Tuple
 
 # Third-party Library Imports
 import matplotlib.pyplot as plt
@@ -39,8 +39,8 @@ from pyro import clear_param_store
 
 
 # Internal Project Imports
-from ..gp import GaussianProcessBase
-from ..types import PyroOptimiser, PyroKernel, PyroPriors, TensorLike
+from .. import GaussianProcessBase
+from ...types import PyroOptimiser, PyroKernel, PyroPriors, TensorLike
 
 
 # -------------------------------- #

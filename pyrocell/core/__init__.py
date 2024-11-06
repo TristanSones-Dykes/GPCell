@@ -12,8 +12,8 @@ from pyro.infer import Trace_ELBO
 from torch import no_grad, tensor, Tensor, std, mean
 
 # Internal Project Imports
-from pyrocell.gp import pyro as pyro_gp
-from pyrocell.gp import gpflow as gpflow_gp
+from pyrocell.gp.pyro import pyro as pyro_gp
+from pyrocell.gp.gpflow import gpflow as gpflow_gp
 from pyrocell.gp import GaussianProcessBase
 
 
