@@ -1,26 +1,31 @@
-# Standard library imports
+# Standard Library Imports
 from math import ceil, sqrt
+from typing import List, Optional, cast
 
-# External library imports
+# Third-Party Library Imports
 import matplotlib.pyplot as plt
 
-# External type imports
+# Direct Namespace Imports
 from pyro.nn.module import PyroSample
 from pyro.distributions import Uniform
 from pyro.infer import Trace_ELBO
 from torch import no_grad, tensor, Tensor, std, mean
 
-# Internal imports
+# Internal Project Imports
 from .. import utils
 from ..gp.pyro import GaussianProcess, OU, OUosc, background_noise, detrend
 
 
 class OscillatorDetector:
-    def __init__(self, path: str = None):
+    def __init__(self, path: Optional[str] = None):
         """
         Initialize the Oscillator Detector
+        If a path is provided, load data from the csv file
 
-        :param str path: Path to the csv file
+        Parameters
+        ----------
+        path : str | None
+            Path to the csv file
         """
         if path is not None:
             (
@@ -53,9 +58,10 @@ class OscillatorDetector:
         Load data from a csv file
 
 
-
-
-        :param str path: Path to the csv file
+        Parameters
+        ----------
+        path : str
+            Path to the csv file
         """
         (
             self.time,
@@ -71,7 +77,10 @@ class OscillatorDetector:
         """
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
 
-        :param bool verbose: Print fitting progress
+        Parameters
+        ----------
+        **kwargs
+            Named arguments for the fitting process and administrative options
         """
         # default arguments
         default_kwargs = {"verbose": False, "plots": [], "jitter": 1.0e-5}
@@ -117,10 +126,12 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         # --- detrend and denoise cell data --- #
-        self.model_detrend = [GaussianProcess] * self.N
-        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_LL, self.OUosc_LL = [
-            [Tensor] * self.N for _ in range(5)
-        ]
+        self.model_detrend: List[Optional[GaussianProcess]] = [None] * self.N
+        self.y_detrend: List[Optional[Tensor]] = [None] * self.N
+        self.noise_detrend: List[Optional[Tensor]] = [None] * self.N
+        self.LLR_list: List[Optional[Tensor]] = [None] * self.N
+        self.OU_LL: List[Optional[Tensor]] = [None] * self.N
+        self.OUosc_LL: List[Optional[Tensor]] = [None] * self.N
 
         ou_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
@@ -210,7 +221,8 @@ class OscillatorDetector:
                 if not isinstance(self.model_detrend[i], GaussianProcess):
                     continue
 
-                m, y_detrended = self.model_detrend[i], self.y_detrend[i]
+                m = cast(GaussianProcess, self.model_detrend[i])
+                y_detrended = cast(Tensor, self.y_detrend[i])
 
                 # plot
                 plt.subplot(dim, dim, i + 1)

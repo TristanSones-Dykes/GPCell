@@ -1,14 +1,13 @@
-# Standard library imports
-from typing import Callable, Dict, List, Optional, Tuple
+# Standard Library Imports
+from typing import Callable, List, Optional, Tuple
 
-# External library imports
+# Third-party Library Imports
 import matplotlib.pyplot as plt
 
-# External type imports
+# Direct Namespace Imports
 from torch import (
     Tensor,
     clone,
-    exp,
     tensor,
     no_grad,
     zeros,
@@ -21,20 +20,25 @@ from torch import (
     pi,
 )
 from torch.linalg import solve
-from torch.optim import LBFGS, Optimizer
+from torch.optim import LBFGS
 from torch.linalg import LinAlgError
 
-# --- Pyro-related imports --- #
 
+# --- Pyro Imports --- #
 # Gaussian processes
 from pyro.contrib.gp.models import GPRegression
-from pyro.contrib.gp.kernels import Isotropy, Cosine, RBF, Product, Exponential
+from pyro.contrib.gp.kernels import Cosine, RBF, Product, Exponential
 
 # Primitives and utilities
-from pyro.nn import PyroParam, PyroSample
+from pyro.nn import PyroParam, PyroSample  # noqa: F401
 from pyro.distributions.constraints import greater_than
 from pyro.infer import Trace_ELBO
 from pyro import clear_param_store
+
+
+# Internal Project Imports
+from ..gp.base import GaussianProcessBase
+from ..types import PyroOptimiser, PyroKernel, PyroPriors
 
 
 # -------------------------------- #
@@ -42,18 +46,21 @@ from pyro import clear_param_store
 # -------------------------------- #
 
 
-class GaussianProcess:
+class GaussianProcess(GaussianProcessBase):
     """
     Gaussian Process class for fitting and evaluating parameters
     """
 
     def __init__(
-        self, kernel: Isotropy, optimizer: Optimizer, variance_loc: str = ["variance"]
+        self,
+        kernel: PyroKernel,
+        optimiser: PyroOptimiser,
+        variance_loc: List[str] = ["variance"],
     ):
         self.kernel = kernel
         """Kernel for the Gaussian Process"""
-        self.optimizer = optimizer
-        """Optimizer for the Gaussian Process"""
+        self.optimiser = optimiser
+        """Optimiser for the Gaussian Process"""
         self.variance_loc = variance_loc
         """Location of the variance parameter in the kernel"""
 
@@ -87,7 +94,7 @@ class GaussianProcess:
         noise: Optional[Tensor] = None,
         jitter: float = 1.0e-5,
         num_steps: int = 1000,
-        priors: Dict[str, PyroParam | PyroSample] = {},
+        priors: PyroPriors = {},
         verbose: bool = False,
     ) -> bool:
         """
@@ -119,25 +126,25 @@ class GaussianProcess:
 
         # gaussian regression
         sgpr = GPRegression(X, y, kernel, noise=noise, jitter=jitter)
-        optimizer = self.optimizer(sgpr.parameters(), lr=lr)
+        optimiser = self.optimiser(sgpr.parameters(), lr=lr)
 
         # check if closure is needed
-        if optimizer.__class__.__name__ == "LBFGS":
+        if optimiser.__class__.__name__ == "LBFGS":
 
             def closure():
-                optimizer.zero_grad()
+                optimiser.zero_grad()
                 loss = loss_fn(sgpr.model, sgpr.guide)
                 loss.backward()
                 return loss
         else:
-            closure = None
+            closure = None  # type: ignore
 
         try:
             for i in range(num_steps):
-                optimizer.zero_grad()
+                optimiser.zero_grad()
                 loss = loss_fn(sgpr.model, sgpr.guide)
                 loss.backward()
-                optimizer.step(closure)
+                optimiser.step(closure)
 
                 # if verbose and (i % 100 == 0 or i == num_steps-1):
                 #    print(f"lengthscale: {sgpr.kernel.lengthscale.item()}")
@@ -156,7 +163,8 @@ class GaussianProcess:
 
         # mean and variance
         with no_grad():
-            self.mean, self.cov = sgpr(X, full_cov=True, noiseless=False)
+            res: Tuple[Tensor, Tensor] = sgpr(X, full_cov=True, noiseless=False)
+            self.mean, self.cov = res
             self.var = self.cov.diag()
 
         self.X_true = X
@@ -235,18 +243,23 @@ class GaussianProcess:
             plt.plot(X, y_true, zorder=0, c="b", label="True data")
 
 
+# -----------------------------------------#
+# --- Gaussian Process Implementations --- #
+# -----------------------------------------#
+
+
 class OU(GaussianProcess):
     """
     Ornstein-Uhlenbeck process class
     """
 
-    def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
+    def __init__(self, priors: PyroPriors):
         # create kernel
         kernel = Exponential(input_dim=1)
         for param, prior in priors.items():
             setattr(kernel, param, prior)
 
-        super().__init__(kernel, LBFGS)
+        super().__init__(kernel, LBFGS)  # type: ignore
 
 
 class OUosc(GaussianProcess):
@@ -256,8 +269,8 @@ class OUosc(GaussianProcess):
 
     def __init__(
         self,
-        ou_priors: Dict[str, PyroParam | PyroSample],
-        osc_priors: Dict[str, PyroParam | PyroSample],
+        ou_priors: PyroPriors,
+        osc_priors: PyroPriors,
     ):
         # create kernels
         ou_kernel = Exponential(input_dim=1)
@@ -272,7 +285,7 @@ class OUosc(GaussianProcess):
         # combine kernels
         kernel = Product(ou_kernel, osc_kernel)
 
-        super().__init__(kernel, LBFGS, variance_loc=["kern0", "variance_map"])
+        super().__init__(kernel, LBFGS, variance_loc=["kern0", "variance_map"])  # type: ignore
 
 
 class NoiseModel(GaussianProcess):
@@ -280,18 +293,18 @@ class NoiseModel(GaussianProcess):
     Noise model class
     """
 
-    def __init__(self, priors: Dict[str, PyroParam | PyroSample]):
+    def __init__(self, priors: PyroPriors):
         # create kernel
         kernel = RBF(input_dim=1)
         for param, prior in priors.items():
             setattr(kernel, param, prior)
 
-        super().__init__(kernel, LBFGS)
+        super().__init__(kernel, LBFGS)  # type: ignore
 
 
-# ------------------------------- #
+# -------------------------------- #
 # --- Gaussian Process helpers --- #
-# ------------------------------- #
+# -------------------------------- #
 
 
 def detrend(
@@ -371,39 +384,3 @@ def background_noise(
     print(f"Standard deviation: {std}")
 
     return std, models
-
-
-# Isotropic kernels
-class Matern12(Isotropy):
-    """
-    Matern 1/2 kernel, non-smooth and non-differentiable
-    """
-
-    def __init__(
-        self,
-        input_dim: int,
-        variance: Optional[Tensor] = None,
-        lengthscale: Optional[Tensor] = None,
-        active_dims: Optional[List] = None,
-    ):
-        """
-        :param int input_dim: Dimension of input
-        :param Tensor variance: Variance of the kernel (optional)
-        :param Tensor lengthscale: Lengthscale of the kernel (optional)
-        :param list active_dims: Active dimensions (optional)
-        """
-        super().__init__(input_dim, variance, lengthscale, active_dims)
-
-    def forward(self, X: Tensor, Z: Optional[Tensor] = None, diag: bool = False):
-        """
-        Compute the covariance matrix of kernel on inputs X and Z
-
-        :param Tensor X: Input tensor
-        :param Tensor Z: Input tensor (optional)
-        :param bool diag: Return the diagonal of the covariance matrix
-        """
-        if diag:
-            return self._diag(X)
-
-        r = self._scaled_dist(X, Z)
-        return self.variance * exp(-r)

@@ -1,9 +1,27 @@
-# External library imports
+# --- IMPORT STRUCTURE TEMPLATE --- #
+
+# Standard Library Imports
+
+# Third-Party Library Imports
+
+# Direct Namespace Imports
+
+# Internal Project Imports
+
+# --------------------------------- #
+
+# Standard Library Imports
+
+# Third-Party Library Imports
 import pandas as pd
 import torch
 
-# External type imports
+# Direct Namespace Imports
 from torch import Tensor
+
+# Internal Project Imports
+
+# External type imports
 
 
 def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]:
