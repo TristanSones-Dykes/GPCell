@@ -1,0 +1,10 @@
+name: GPosc
+dependencies:
+  - numpy
+  - scipy
+  - tensorflow
+  - tensorflow-probability
+  - gpflow
+  - pandas
+  - matplotlib
+  - jupyterlab
