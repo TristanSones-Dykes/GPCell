@@ -12,21 +12,29 @@ from pyro.infer import Trace_ELBO
 from torch import no_grad, tensor, Tensor, std, mean
 
 # Internal Project Imports
-from .. import utils
-from ..gp.pyro import GaussianProcess, OU, OUosc, background_noise, detrend
+from pyrocell.gp import pyro as pyro_gp
+from pyrocell.gp import gpflow as gpflow_gp
+from pyrocell.gp import GaussianProcessBase
 
 
 class OscillatorDetector:
-    def __init__(self, path: Optional[str] = None):
+    def __init__(self, backend: str, path: Optional[str] = None):
         """
         Initialize the Oscillator Detector
         If a path is provided, load data from the csv file
 
         Parameters
         ----------
+        backend : str
+            Backend library for the Gaussian Process models
         path : str | None
             Path to the csv file
         """
+        if backend == "pyro":
+            self.GP = pyro_gp
+        elif backend == "gpflow":
+            self.GP = gpflow_gp
+
         if path is not None:
             (
                 self.time,
@@ -36,8 +44,8 @@ class OscillatorDetector:
                 self.y_all,
                 self.y_length,
                 self.N,
-            ) = utils.load_data(path)
-            self.allowed = set(["background", "detrend"])
+            ) = self.GP.load_data(path)
+        self.allowed = set(["background", "detrend"])
 
     def __str__(self):
         # create a summary of the models and data
@@ -71,7 +79,7 @@ class OscillatorDetector:
             self.y_all,
             self.y_length,
             self.N,
-        ) = utils.load_data(path)
+        ) = self.GP.load_data(path)
 
     def fit_models(self, *args, **kwargs):
         """
@@ -115,7 +123,7 @@ class OscillatorDetector:
             y_curr -= mean(y_curr)
 
         # --- background noise --- #
-        self.bckgd_std, self.bckgd_models = background_noise(
+        self.bckgd_std, self.bckgd_models = self.GP.background_noise(
             self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose
         )
 
@@ -126,7 +134,7 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         # --- detrend and denoise cell data --- #
-        self.model_detrend: List[Optional[GaussianProcess]] = [None] * self.N
+        self.model_detrend: List[Optional[GaussianProcessBase]] = [None] * self.N
         self.y_detrend: List[Optional[Tensor]] = [None] * self.N
         self.noise_detrend: List[Optional[Tensor]] = [None] * self.N
         self.LLR_list: List[Optional[Tensor]] = [None] * self.N
@@ -155,7 +163,7 @@ class OscillatorDetector:
             y_curr = y_curr / std(y_curr)
 
             # detrend
-            res = detrend(X_curr, y_curr, 7.1, verbose=verbose)
+            res = self.GP.detrend(X_curr, y_curr, 7.1, verbose=verbose)
 
             # skip if failed
             if res is None:
@@ -163,7 +171,7 @@ class OscillatorDetector:
             y_detrended, noise_model = res
 
             # fit OU, OU+Oscillator
-            ou = OU(ou_priors)
+            ou = self.GP.OU(ou_priors)
             success = ou.fit(
                 X_curr,
                 y_detrended,
@@ -174,7 +182,7 @@ class OscillatorDetector:
             if success:
                 self.OU_LL[i] = ou.log_likelihood()
 
-            ouosc = OUosc(ou_priors, osc_priors)
+            ouosc = self.GP.OUosc(ou_priors, osc_priors)
             success = ouosc.fit(
                 X_curr,
                 y_detrended,
@@ -218,10 +226,10 @@ class OscillatorDetector:
 
             for i in range(self.N):
                 # check properly fit
-                if not isinstance(self.model_detrend[i], GaussianProcess):
+                if not isinstance(self.model_detrend[i], GaussianProcessBase):
                     continue
 
-                m = cast(GaussianProcess, self.model_detrend[i])
+                m = cast(GaussianProcessBase, self.model_detrend[i])
                 y_detrended = cast(Tensor, self.y_detrend[i])
 
                 # plot

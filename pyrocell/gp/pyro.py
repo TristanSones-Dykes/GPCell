@@ -1,8 +1,10 @@
 # Standard Library Imports
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, cast
 
 # Third-party Library Imports
 import matplotlib.pyplot as plt
+import pandas as pd
+import torch
 
 # Direct Namespace Imports
 from torch import (
@@ -38,7 +40,7 @@ from pyro import clear_param_store
 
 # Internal Project Imports
 from ..gp import GaussianProcessBase
-from ..types import PyroOptimiser, PyroKernel, PyroPriors
+from ..types import PyroOptimiser, PyroKernel, PyroPriors, TensorLike
 
 
 # -------------------------------- #
@@ -65,8 +67,8 @@ class GaussianProcess(GaussianProcessBase):
         """Location of the variance parameter in the kernel"""
 
     def __call__(
-        self, X: Tensor, full_cov: bool = False, noiseless: bool = False
-    ) -> Tuple[Tensor, Tensor]:
+        self, X: TensorLike, full_cov: bool = False, noiseless: bool = False
+    ) -> Tuple[TensorLike, TensorLike]:
         """
         Evaluate the Gaussian Process on the input domain
 
@@ -76,6 +78,9 @@ class GaussianProcess(GaussianProcessBase):
 
         :return Tuple[Tensor, Tensor]: Mean and standard deviation
         """
+        if not isinstance(X, Tensor):
+            raise TypeError("Input domain must be a tensor")
+
         with no_grad():
             mean, cov = self.fit_gp(X, full_cov=full_cov, noiseless=noiseless)
 
@@ -87,8 +92,8 @@ class GaussianProcess(GaussianProcessBase):
 
     def fit(
         self,
-        X: Tensor,
-        y: Tensor,
+        X: TensorLike,
+        y: TensorLike,
         loss_fn: Callable[..., Tensor],
         lr: float = 0.01,
         noise: Optional[Tensor] = None,
@@ -112,6 +117,9 @@ class GaussianProcess(GaussianProcessBase):
 
         :return bool: Success status
         """
+        if not isinstance(X, Tensor) or not isinstance(y, Tensor):
+            raise TypeError("Input domain and target values must be tensors")
+
         clear_param_store()
 
         # check if kernel is class or object
@@ -173,7 +181,7 @@ class GaussianProcess(GaussianProcessBase):
 
         return True
 
-    def log_likelihood(self, y: Optional[Tensor] = None) -> Tensor:
+    def log_likelihood(self, y: Optional[TensorLike] = None) -> Tensor:
         """
         Calculates the log-marginal likelihood for the Gaussian process.
         If no target values are input, calculates log likelihood for data is was it on.
@@ -184,6 +192,8 @@ class GaussianProcess(GaussianProcessBase):
         # no y input -> use fitted mean and cov
         if y is None:
             y, mean, K = clone(self.y_true), clone(self.mean), clone(self.cov)
+        elif not isinstance(y, Tensor):
+            raise TypeError("Target values must be tensors")
         else:
             # evaluate new mean and cov
             mean, K = self.fit_gp(self.X_true, y)
@@ -208,8 +218,8 @@ class GaussianProcess(GaussianProcessBase):
 
     def test_plot(
         self,
-        X: Optional[Tensor] = None,
-        y_true: Optional[Tensor] = None,
+        X: Optional[TensorLike] = None,
+        y_true: Optional[TensorLike] = None,
         plot_sd: bool = False,
     ):
         """
@@ -229,9 +239,15 @@ class GaussianProcess(GaussianProcessBase):
         if X is None:
             X = self.X_true
             mean, std = self.mean, self.var.sqrt()
+        else:
+            if not isinstance(X, Tensor):
+                raise TypeError("Input domain must be a tensor")
 
         if y_true is None:
             y_true = self.y_true
+        else:
+            if not isinstance(y_true, Tensor):
+                raise TypeError("Target values must be tensors")
 
         # plot
         plt.plot(X, mean, zorder=1, c="k", label="Fit GP")
@@ -340,7 +356,7 @@ def detrend(
 
 def background_noise(
     X: Tensor, bckgd: Tensor, bckgd_length: Tensor, M: int, verbose: bool = False
-) -> Tuple[Tensor, list[GaussianProcess]]:
+) -> Tuple[Tensor, list[NoiseModel]]:
     """
     Fit a background noise model to the data
 
@@ -384,3 +400,53 @@ def background_noise(
     print(f"Standard deviation: {std}")
 
     return std, models
+
+
+# ---------------------- #
+# --- Pyro Utilities --- #
+# ---------------------- #
+
+
+def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]:
+    """
+    Loads experiment data from a csv file. This file must have:
+    - Time (h) column
+    - Cell columns, name starting with 'Cell'
+    - Background columns, name starting with 'Background'
+
+    :param str path: Path to the csv file.
+
+    :return Tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]: Split, formatted experimental data
+    - time: time in hours
+    - bckgd: background time-series data
+    - bckgd_length: length of each background trace
+    - M: count of background regions
+    - y_all: cell time-series data
+    - y_length: length of each cell trace
+    - N: count of cell regions
+    """
+    df = pd.read_csv(path).fillna(0)
+    data_cols = [col for col in df if col.startswith("Cell")]
+    bckgd_cols = [col for col in df if col.startswith("Background")]
+    time = torch.from_numpy(df["Time (h)"].values[:, None])
+
+    bckgd = torch.from_numpy(df[bckgd_cols].values)
+    M = bckgd.shape[1]
+
+    bckgd_length = torch.zeros(M, dtype=torch.int32)
+
+    for i in range(M):
+        bckgd_curr = bckgd[:, i]
+        bckgd_length[i] = torch.max(torch.nonzero(bckgd_curr))
+
+    y_all = torch.from_numpy(df[data_cols].values)
+
+    N = y_all.shape[1]
+
+    y_length = torch.zeros(N, dtype=torch.int32)
+
+    for i in range(N):
+        y_curr = y_all[:, i]
+        y_length[i] = torch.max(torch.nonzero(y_curr))
+
+    return time, bckgd, bckgd_length, M, y_all, y_length, N

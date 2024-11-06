@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Callable, TypeVar, Union, Mapping
+from typing import Callable, Union, Mapping
 
 # Third-Party Library Imports
 
@@ -7,12 +7,10 @@ from typing import Callable, TypeVar, Union, Mapping
 from torch import Tensor
 
 from numpy.typing import NDArray
-from numpy import float64
+from numpy import float64, int32
 
 from pyro.contrib.gp.kernels import Isotropy, Product, RBF, Cosine, Exponential
 from pyro.nn import PyroParam, PyroSample
-from pyro.distributions.constraints import greater_than
-from pyro.infer import Trace_ELBO
 
 
 # Internal Project Imports
@@ -28,4 +26,21 @@ PyroPriors = Mapping[str, Union[PyroParam, PyroSample]]
 
 
 # --- Shared Types --- #
-TensorLike = Union[Tensor, NDArray[float64]]
+TensorLike = Union[Tensor, NDArray[float64], NDArray[int32]]
+
+
+# --- Shared Functions --- #
+def check_types(type: type, values: list):
+    """
+    Check if the values are of the correct type.
+
+    Parameters
+    ----------
+    type : type
+        The type to check against.
+    values : list
+        List of values to check.
+    """
+    for value in values:
+        if not isinstance(value, type):
+            raise TypeError(f"Expected type {type}, got {type(value)}")
