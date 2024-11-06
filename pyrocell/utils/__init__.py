@@ -5,6 +5,7 @@ import torch
 # External type imports
 from torch import Tensor
 
+
 def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]:
     """
     Loads experiment data from a csv file. This file must have:
@@ -23,28 +24,28 @@ def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, i
     - y_length: length of each cell trace
     - N: count of cell regions
     """
-    df = pd.read_csv(path).fillna(0)  
-    data_cols = [col for col in df if col.startswith('Cell')]
-    bckgd_cols = [col for col in df if col.startswith('Background')]
-    time = torch.from_numpy(df['Time (h)'].values[:,None])
+    df = pd.read_csv(path).fillna(0)
+    data_cols = [col for col in df if col.startswith("Cell")]
+    bckgd_cols = [col for col in df if col.startswith("Background")]
+    time = torch.from_numpy(df["Time (h)"].values[:, None])
 
     bckgd = torch.from_numpy(df[bckgd_cols].values)
     M = bckgd.shape[1]
-    
-    bckgd_length = torch.zeros(M,dtype=torch.int32)
-    
+
+    bckgd_length = torch.zeros(M, dtype=torch.int32)
+
     for i in range(M):
-        bckgd_curr = bckgd[:,i]
+        bckgd_curr = bckgd[:, i]
         bckgd_length[i] = torch.max(torch.nonzero(bckgd_curr))
-        
+
     y_all = torch.from_numpy(df[data_cols].values)
-    
+
     N = y_all.shape[1]
-    
-    y_length = torch.zeros(N,dtype=torch.int32)
-    
+
+    y_length = torch.zeros(N, dtype=torch.int32)
+
     for i in range(N):
-        y_curr = y_all[:,i]
+        y_curr = y_all[:, i]
         y_length[i] = torch.max(torch.nonzero(y_curr))
 
     return time, bckgd, bckgd_length, M, y_all, y_length, N

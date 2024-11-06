@@ -16,4 +16,6 @@ dependencies:
   - jupyter
   - pandas
   - pdoc
-prefix: /Users/tristansones-dykes/mambaforge/envs/Pyrocell
+  - tensorflow
+  - tensorflow-probability
+  - gpflow

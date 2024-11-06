@@ -15,6 +15,7 @@ from torch import no_grad, tensor, Tensor, std, mean
 from .. import utils
 from ..gp import GaussianProcess, OU, OUosc, background_noise, detrend
 
+
 class OscillatorDetector:
     def __init__(self, path: str = None):
         """
@@ -23,7 +24,15 @@ class OscillatorDetector:
         :param str path: Path to the csv file
         """
         if path is not None:
-            self.time, self.bckgd, self.bckgd_length, self.M, self.y_all, self.y_length, self.N = utils.load_data(path)
+            (
+                self.time,
+                self.bckgd,
+                self.bckgd_length,
+                self.M,
+                self.y_all,
+                self.y_length,
+                self.N,
+            ) = utils.load_data(path)
             self.allowed = set(["background", "detrend"])
 
     def __str__(self):
@@ -40,14 +49,24 @@ class OscillatorDetector:
 
         return out
 
-
     def load_data(self, path: str):
         """
         Load data from a csv file
-        
+
+
+
+
         :param str path: Path to the csv file
         """
-        self.time, self.bckgd, self.bckgd_length, self.M, self.y_all, self.y_length, self.N = utils.load_data(path)
+        (
+            self.time,
+            self.bckgd,
+            self.bckgd_length,
+            self.M,
+            self.y_all,
+            self.y_length,
+            self.N,
+        ) = utils.load_data(path)
 
     def fit_models(self, *args, **kwargs):
         """
@@ -70,23 +89,27 @@ class OscillatorDetector:
         if not plots.issubset(self.allowed):
             raise ValueError(f"Invalid plot type(s) selected: {plots - self.allowed}")
         if verbose:
-            print(f"Loaded data with {self.N} cells and {self.M} background noise models")
-            print(f"Plots: {"on" if plots else "off"}")
+            print(
+                f"Loaded data with {self.N} cells and {self.M} background noise models"
+            )
+            print(f"Plots: {'on' if plots else 'off'}")
             print("\n")
             print("Fitting background noise...")
 
         # --- data preprocessing --- #
-        
+
         # centre all data
         for i in range(self.N):
-            y_curr = self.y_all[:self.y_length[i],i]
+            y_curr = self.y_all[: self.y_length[i], i]
             y_curr -= mean(y_curr)
         for i in range(self.M):
-            y_curr = self.bckgd[:self.bckgd_length[i],i]
+            y_curr = self.bckgd[: self.bckgd_length[i], i]
             y_curr -= mean(y_curr)
 
         # --- background noise --- #
-        self.bckgd_std, self.bckgd_models = background_noise(self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose)
+        self.bckgd_std, self.bckgd_models = background_noise(
+            self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose
+        )
 
         # plot and start next step
         if "background" in plots:
@@ -94,27 +117,28 @@ class OscillatorDetector:
         if verbose:
             print("\nDetrending and denoising cell data...")
 
-
         # --- detrend and denoise cell data --- #
         self.model_detrend = [GaussianProcess] * self.N
-        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_LL, self.OUosc_LL = [[Tensor] * self.N for _ in range(5)]
+        self.y_detrend, self.noise_detrend, self.LLR_list, self.OU_LL, self.OUosc_LL = [
+            [Tensor] * self.N for _ in range(5)
+        ]
 
         ou_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
-            "variance": PyroSample(Uniform(tensor(0.1), tensor(2.0)))
-            #"lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0)),
-            #"variance" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
+            "variance": PyroSample(Uniform(tensor(0.1), tensor(2.0))),
+            # "lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0)),
+            # "variance" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
         }
         osc_priors = {
             "lengthscale": PyroSample(Uniform(tensor(0.1), tensor(4.0)))
-            #"lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
+            # "lengthscale" : PyroParam(tensor(1.0), constraint=greater_than(0.0))
         }
 
         # loop through and fit models
         for i in range(self.N):
             # reference input data
-            X_curr = self.time[:self.y_length[i]]
-            y_curr = self.y_all[:self.y_length[i],i]
+            X_curr = self.time[: self.y_length[i]]
+            y_curr = self.y_all[: self.y_length[i], i]
 
             # normalise and reshape inplace
             noise = self.bckgd_std / std(y_curr)
@@ -127,19 +151,30 @@ class OscillatorDetector:
             if res is None:
                 continue
             y_detrended, noise_model = res
-            
+
             # fit OU, OU+Oscillator
             ou = OU(ou_priors)
-            success = ou.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            success = ou.fit(
+                X_curr,
+                y_detrended,
+                Trace_ELBO().differentiable_loss,
+                verbose=verbose,
+                jitter=jitter,
+            )
             if success:
                 self.OU_LL[i] = ou.log_likelihood()
 
             ouosc = OUosc(ou_priors, osc_priors)
-            success = ouosc.fit(X_curr, y_detrended, Trace_ELBO().differentiable_loss, verbose=verbose, jitter=jitter)
+            success = ouosc.fit(
+                X_curr,
+                y_detrended,
+                Trace_ELBO().differentiable_loss,
+                verbose=verbose,
+                jitter=jitter,
+            )
             if success:
                 self.OUosc_LL[i] = ouosc.log_likelihood()
 
-            
             self.y_detrend[i] = y_detrended
             self.model_detrend[i] = noise_model
             self.noise_detrend[i] = noise
@@ -147,10 +182,10 @@ class OscillatorDetector:
         if "detrend" in plots:
             self.plot("detrend")
 
-    def plot(self, target: str): 
+    def plot(self, target: str):
         """
         Plot the data
-        
+
         :param str target: String or List of strings describing plot types
         """
         plot_size = 15 / 5
@@ -160,7 +195,7 @@ class OscillatorDetector:
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, m in enumerate(self.bckgd_models):
-                plt.subplot(dim, dim, i+1)
+                plt.subplot(dim, dim, i + 1)
                 m.test_plot(plot_sd=True)
                 plt.title(f"Background {i+1}")
 
@@ -179,10 +214,12 @@ class OscillatorDetector:
                 m, y_detrended = self.model_detrend[i], self.y_detrend[i]
 
                 # plot
-                plt.subplot(dim, dim, i+1)
+                plt.subplot(dim, dim, i + 1)
                 m.test_plot()
                 with no_grad():
-                    plt.plot(self.time[:self.y_length[i]], y_detrended, label="Detrended")
+                    plt.plot(
+                        self.time[: self.y_length[i]], y_detrended, label="Detrended"
+                    )
 
                 plt.title(f"Cell {i+1}")
             plt.legend()
