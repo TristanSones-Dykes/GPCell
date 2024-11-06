@@ -5,15 +5,14 @@ from math import ceil, sqrt
 import matplotlib.pyplot as plt
 
 # External type imports
-from pyro.nn.module import PyroSample, PyroParam
+from pyro.nn.module import PyroSample
 from pyro.distributions import Uniform
-from pyro.distributions.constraints import greater_than
 from pyro.infer import Trace_ELBO
 from torch import no_grad, tensor, Tensor, std, mean
 
 # Internal imports
 from .. import utils
-from ..gp import GaussianProcess, OU, OUosc, background_noise, detrend
+from ..gp.pyro import GaussianProcess, OU, OUosc, background_noise, detrend
 
 
 class OscillatorDetector:
