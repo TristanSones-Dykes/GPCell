@@ -37,7 +37,7 @@ from pyro import clear_param_store
 
 
 # Internal Project Imports
-from ..gp.base import GaussianProcessBase
+from ..gp import GaussianProcessBase
 from ..types import PyroOptimiser, PyroKernel, PyroPriors
 
 
