@@ -6,12 +6,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, ndarray, zeros
+from numpy import float64, int32, max, zeros
 from numpy.typing import NDArray
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
-from pyrocell.types import TensorLike, check_types
+from pyrocell.types import Ndarray
 
 # -------------------------------- #
 # --- Gaussian Process classes --- #
@@ -25,29 +25,29 @@ class GaussianProcess(GaussianProcessBase):
 
     def __call__(
         self,
-        X: TensorLike,
+        X: Ndarray,
         full_cov: bool = False,
-    ) -> Tuple[TensorLike, TensorLike]:
+    ) -> Tuple[Ndarray, Ndarray]:
         raise NotImplementedError
 
     def fit(
         self,
-        X: TensorLike,
-        y: TensorLike,
+        X: Ndarray,
+        y: Ndarray,
         verbose: bool = False,
     ):
         raise NotImplementedError
 
     def log_likelihood(
         self,
-        y: Optional[TensorLike] = None,
-    ) -> TensorLike:
+        y: Optional[Ndarray] = None,
+    ) -> Ndarray:
         raise NotImplementedError
 
     def test_plot(
         self,
-        X: Optional[TensorLike] = None,
-        y: Optional[TensorLike] = None,
+        X: Optional[Ndarray] = None,
+        y: Optional[Ndarray] = None,
         plot_sd: bool = False,
     ):
         raise NotImplementedError
@@ -67,22 +67,20 @@ def detrend(X: NDArray[float64], y: NDArray[float64]) -> NDArray[float64]:
     """
     Detrend stochastic process using RBF process
     """
-    check_types(ndarray, [X, y])
 
     return zeros(y.shape[0])
 
 
 def background_noise(
-    X: TensorLike,
-    bckgd: TensorLike,
-    bkcgd_length: TensorLike,
+    X: Ndarray,
+    bckgd: Ndarray,
+    bkcgd_length: Ndarray,
     M: int,
     verbose: bool = False,
 ) -> Tuple[NDArray[float64], GaussianProcess]:
     """
     Fit background noise model to the data
     """
-    check_types(ndarray, [X, bckgd, bkcgd_length])
 
     return zeros(M), GaussianProcess()
 

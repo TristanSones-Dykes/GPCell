@@ -5,17 +5,6 @@ from typing import Callable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
-from pyro import clear_param_store
-from pyro.contrib.gp.kernels import RBF, Cosine, Exponential, Product
-
-# --- Pyro Imports --- #
-# Gaussian processes
-from pyro.contrib.gp.models import GPRegression
-from pyro.distributions.constraints import greater_than
-from pyro.infer import Trace_ELBO
-
-# Primitives and utilities
-from pyro.nn import PyroParam, PyroSample  # noqa: F401
 
 # Direct Namespace Imports
 from torch import (
@@ -35,9 +24,16 @@ from torch import (
 from torch.linalg import LinAlgError, solve
 from torch.optim import LBFGS
 
-from ...types import PyroKernel, PyroOptimiser, PyroPriors, TensorLike
+# --- Pyro Imports --- #
+from pyro import clear_param_store
+from pyro.contrib.gp.kernels import RBF, Cosine, Exponential, Product
+from pyro.contrib.gp.models import GPRegression
+from pyro.distributions.constraints import greater_than
+from pyro.infer import Trace_ELBO
+from pyro.nn import PyroParam, PyroSample  # noqa: F401
 
 # Internal Project Imports
+from ...types import PyroKernel, PyroOptimiser, PyroPriors
 from .. import GaussianProcessBase
 
 # -------------------------------- #
@@ -64,8 +60,8 @@ class GaussianProcess(GaussianProcessBase):
         """Location of the variance parameter in the kernel"""
 
     def __call__(
-        self, X: TensorLike, full_cov: bool = False, noiseless: bool = False
-    ) -> Tuple[TensorLike, TensorLike]:
+        self, X: Tensor, full_cov: bool = False, noiseless: bool = False
+    ) -> Tuple[Tensor, Tensor]:
         """
         Evaluate the Gaussian Process on the input domain
 
@@ -89,8 +85,8 @@ class GaussianProcess(GaussianProcessBase):
 
     def fit(
         self,
-        X: TensorLike,
-        y: TensorLike,
+        X: Tensor,
+        y: Tensor,
         loss_fn: Callable[..., Tensor],
         lr: float = 0.01,
         noise: Optional[Tensor] = None,
@@ -178,7 +174,7 @@ class GaussianProcess(GaussianProcessBase):
 
         return True
 
-    def log_likelihood(self, y: Optional[TensorLike] = None) -> Tensor:
+    def log_likelihood(self, y: Optional[Tensor] = None) -> Tensor:
         """
         Calculates the log-marginal likelihood for the Gaussian process.
         If no target values are input, calculates log likelihood for data is was it on.
@@ -215,8 +211,8 @@ class GaussianProcess(GaussianProcessBase):
 
     def test_plot(
         self,
-        X: Optional[TensorLike] = None,
-        y_true: Optional[TensorLike] = None,
+        X: Optional[Tensor] = None,
+        y_true: Optional[Tensor] = None,
         plot_sd: bool = False,
     ):
         """
