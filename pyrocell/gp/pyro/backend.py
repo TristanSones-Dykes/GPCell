@@ -65,11 +65,19 @@ class GaussianProcess(GaussianProcessBase):
         """
         Evaluate the Gaussian Process on the input domain
 
-        :param Tensor X: Input domain
-        :param bool full_cov: Return full covariance matrix
-        :param bool noiseless: Return noiseless predictions
+        Parameters
+        ----------
+        X: Tensor
+            Input domain
+        full_cov: bool
+            Return full covariance matrix
+        noiseless: bool
+            Return noiseless predictions
 
-        :return Tuple[Tensor, Tensor]: Mean and standard deviation
+        Returns
+        -------
+        Tuple[Tensor, Tensor]
+            Mean and standard deviation
         """
         if not isinstance(X, Tensor):
             raise TypeError("Input domain must be a tensor")
@@ -98,17 +106,31 @@ class GaussianProcess(GaussianProcessBase):
         """
         Fit the Gaussian Process model, saves the model and training values for later use if needed.
 
-        :param Tensor X: Input domain
-        :param Tensor y: Target values
-        :param Callable[..., Tensor] loss_fn: Loss function
-        :param float lr: Learning rate
-        :param Tensor noise: Variance of Gaussian noise of the model
-        :param float jitter: Positive term to help Cholesky decomposition
-        :param int num_steps: Number of steps
-        :param dict[str, PyroParam | PyroSample] priors: Priors for the kernel parameters
-        :param bool verbose: Print training information
+        Parameters
+        ----------
+        X: Tensor
+            Input domain
+        y: Tensor
+            Target values
+        loss_fn: Callable[..., Tensor]
+            Loss function
+        lr: float
+            Learning rate
+        noise: Tensor
+            Variance of Gaussian noise of the model
+        jitter: float
+            Positive term to help Cholesky decomposition
+        num_steps: int
+            Number of steps
+        priors: PyroPriors
+            Priors for the kernel parameters
+        verbose: bool
+            Print training information
 
-        :return bool: Success status
+        Returns
+        -------
+        bool
+            Success status
         """
         if not isinstance(X, Tensor) or not isinstance(y, Tensor):
             raise TypeError("Input domain and target values must be tensors")
@@ -179,8 +201,15 @@ class GaussianProcess(GaussianProcessBase):
         Calculates the log-marginal likelihood for the Gaussian process.
         If no target values are input, calculates log likelihood for data is was it on.
 
-        :param Tensor y: Observed target values (optional)
-        :return Tensor: Log-likelihood
+        Parameters
+        ----------
+        y: Optional[Tensor]
+            Observed target values
+
+        Returns
+        -------
+        Tensor
+            Log-likelihood
         """
         # no y input -> use fitted mean and cov
         if y is None:
@@ -218,11 +247,14 @@ class GaussianProcess(GaussianProcessBase):
         """
         Create a test plot of the fitted model on the training data
 
-        :param Tensor X: Input domain
-        :param Tensor y_true: True target values
-        :param bool plot_sd: Plot standard deviation
-
-        :return: None
+        Parameters
+        ----------
+        X: Optional[Tensor]
+            Input domain
+        y_true: Optional[Tensor]
+            True target values
+        plot_sd: bool
+            Plot standard deviation
         """
         # check if fit_gp exists
         if not hasattr(self, "fit_gp"):
@@ -318,15 +350,25 @@ class NoiseModel(GaussianProcess):
 
 def detrend(
     X: Tensor, y: Tensor, detrend_lengthscale: float, verbose: bool = False
-) -> Optional[Tuple[Tensor, GaussianProcess]]:
+) -> Optional[Tuple[Tensor, NoiseModel]]:
     """
     Detrend stochastic process using RBF process
 
-    :param Tensor X: Input domain
-    :param Tensor y: Target values
-    :param float detrend_lengthscale: Lengthscale of the detrending process
+    Parameters
+    ----------
+    X: Tensor
+        Input domain
+    y: Tensor
+        Target values
+    detrend_lengthscale: float
+        Lengthscale of the detrending process
+    verbose: bool
+        Print information
 
-    :return Tuple[Tensor, Tensor, Tensor]: mean, variance, detrended values or None
+    Returns
+    -------
+    Tuple[Tensor, Tensor, Tensor]
+        detrended values and noise model
     """
     priors = {
         "lengthscale": PyroParam(
@@ -353,13 +395,23 @@ def background_noise(
     """
     Fit a background noise model to the data
 
-    :param Tensor X: Input domain
-    :param Tensor bckgd: Background traces
-    :param Tensor bckgd_length: Length of each background trace
-    :param int M: Count of background regions
-    :param bool verbose: Print information
+    Parameters
+    ----------
+    X: Tensor
+        Input domain
+    bckgd: Tensor
+        Background traces
+    bckgd_length: Tensor
+        Length of each background trace
+    M: int
+        Count of background regions
+    verbose: bool
+        Print information
 
-    :return: Standard deviation of the noise model, list of noise models
+    Returns
+    -------
+    Tuple[Tensor, list[NoiseModel]]
+        Standard deviation of the overall noise, list of noise models
     """
     priors = {
         "lengthscale": PyroParam(tensor(7.1), constraint=greater_than(0.0)),
@@ -407,16 +459,22 @@ def load_data(path: str) -> tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, i
     - Cell columns, name starting with 'Cell'
     - Background columns, name starting with 'Background'
 
-    :param str path: Path to the csv file.
+    Parameters
+    ----------
+    path: str
+        Path to the csv file
 
-    :return Tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]: Split, formatted experimental data
-    - time: time in hours
-    - bckgd: background time-series data
-    - bckgd_length: length of each background trace
-    - M: count of background regions
-    - y_all: cell time-series data
-    - y_length: length of each cell trace
-    - N: count of cell regions
+    Returns
+    -------
+    tuple[Tensor, Tensor, Tensor, int, Tensor, Tensor, int]
+        Split, formatted experimental data
+        - time: time in hours
+        - bckgd: background time-series data
+        - bckgd_length: length of each background trace
+        - M: count of background regions
+        - y_all: cell time-series data
+        - y_length: length of each cell trace
+        - N: count of cell regions
     """
     df = pd.read_csv(path).fillna(0)
     data_cols = [col for col in df if col.startswith("Cell")]

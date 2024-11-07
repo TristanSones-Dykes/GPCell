@@ -13,11 +13,18 @@ from torch import Tensor, mean, no_grad, std, tensor
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
-from pyrocell.gp.pyro.backend import load_data, background_noise, detrend, OU, OUosc
+from pyrocell.gp.pyro.backend import (
+    NoiseModel,
+    load_data,
+    background_noise,
+    detrend,
+    OU,
+    OUosc,
+)
 
 
 class OscillatorDetector:
-    def __init__(self, backend: str, path: Optional[str] = None):
+    def __init__(self, path: Optional[str] = None):
         """
         Initialize the Oscillator Detector
         If a path is provided, load data from the csv file
@@ -129,7 +136,7 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         # --- detrend and denoise cell data --- #
-        self.model_detrend: List[Optional[GaussianProcessBase]] = [None] * self.N
+        self.model_detrend: List[Optional[NoiseModel]] = [None] * self.N
         self.y_detrend: List[Optional[Tensor]] = [None] * self.N
         self.noise_detrend: List[Optional[Tensor]] = [None] * self.N
         self.LLR_list: List[Optional[Tensor]] = [None] * self.N
@@ -199,7 +206,10 @@ class OscillatorDetector:
         """
         Plot the data
 
-        :param str target: String or List of strings describing plot types
+        Parameters
+        ----------
+        target : str
+            String describing plot type
         """
         plot_size = 15 / 5
         if target == "background":
@@ -224,7 +234,7 @@ class OscillatorDetector:
                 if not isinstance(self.model_detrend[i], GaussianProcessBase):
                     continue
 
-                m = cast(GaussianProcessBase, self.model_detrend[i])
+                m = cast(NoiseModel, self.model_detrend[i])
                 y_detrended = cast(Tensor, self.y_detrend[i])
 
                 # plot
