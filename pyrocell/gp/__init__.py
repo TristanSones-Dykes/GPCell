@@ -1,14 +1,15 @@
 # Standard Library Imports
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple
+from typing import Generic, Optional, Tuple, TypeVar
 
 # Third-Party Library Imports
 # Direct Namespace Imports
 # Internal Project Imports
-from ..types import TensorLike
+
+TensorLike = TypeVar("TensorLike")
 
 
-class GaussianProcessBase(ABC):
+class GaussianProcessBase(ABC, Generic[TensorLike]):
     """
     Base class for Gaussian Process models.
     """

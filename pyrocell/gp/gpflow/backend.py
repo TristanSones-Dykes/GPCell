@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple, override
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -8,10 +8,11 @@ import pandas as pd
 # Direct Namespace Imports
 from numpy import float64, int32, max, zeros
 from numpy.typing import NDArray
+from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
-from pyrocell.types import Ndarray
+from pyrocell.types import Ndarray, GPPriors
 
 # -------------------------------- #
 # --- Gaussian Process classes --- #
@@ -22,6 +23,10 @@ class GaussianProcess(GaussianProcessBase):
     """
     Gaussian Process model using GPflow.
     """
+
+    def __init__(self, kernel: Kernel):
+        self.kernel = kernel
+        """Kernel for the Gaussian Process"""
 
     def __call__(
         self,
@@ -58,17 +63,61 @@ class GaussianProcess(GaussianProcessBase):
 # -----------------------------------------#
 
 
+class OU(GaussianProcess):
+    """
+    Ornstein-Uhlenbeck process class
+    """
+
+    @override
+    def __init__(self, priors: GPPriors):
+        matern = Matern12()
+        assign_priors(matern, priors)
+
+        super().__init__(matern)
+
+
+class OUosc(GaussianProcess):
+    """
+    Ornstein-Uhlenbeck process with an oscillator (cosine) kernel
+    """
+
+    @override
+    def __init__(self, ou_priors: GPPriors, osc_priors: GPPriors):
+        matern = Matern12()
+        assign_priors(matern, ou_priors)
+
+        osc = Cosine()
+        assign_priors(osc, osc_priors)
+
+        super().__init__(matern * osc)
+
+
+class NoiseModel(GaussianProcess):
+    """
+    Noise model class
+    """
+
+    @override
+    def __init__(self, priors: GPPriors):
+        kernel = SquaredExponential()
+        assign_priors(kernel, priors)
+
+        super().__init__(kernel)
+
+
 # -------------------------------- #
 # --- Gaussian Process helpers --- #
 # -------------------------------- #
 
 
-def detrend(X: NDArray[float64], y: NDArray[float64]) -> NDArray[float64]:
+def detrend(
+    X: NDArray[float64], y: NDArray[float64]
+) -> Tuple[NDArray[float64], NoiseModel]:
     """
     Detrend stochastic process using RBF process
     """
 
-    return zeros(y.shape[0])
+    return zeros(y.shape[0]), NoiseModel({})
 
 
 def background_noise(
@@ -77,12 +126,21 @@ def background_noise(
     bkcgd_length: Ndarray,
     M: int,
     verbose: bool = False,
-) -> Tuple[NDArray[float64], GaussianProcess]:
+) -> Tuple[NDArray[float64], List[NoiseModel]]:
     """
     Fit background noise model to the data
     """
 
-    return zeros(M), GaussianProcess()
+    return zeros(M), [NoiseModel({})]
+
+
+def assign_priors(kernel: Kernel, priors: GPPriors):
+    """
+    Assign priors to kernel hyperparameters
+    """
+    for key, prior in priors.items():
+        attribute = getattr(kernel, key)
+        attribute.assign(prior)
 
 
 # ------------------------ #
