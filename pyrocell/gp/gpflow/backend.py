@@ -8,7 +8,12 @@ import pandas as pd
 # Direct Namespace Imports
 from numpy import float64, int32, max, zeros
 from numpy.typing import NDArray
+
 from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
+from gpflow import Parameter
+from gpflow.utilities import to_default_float
+
+import tensorflow_probability as tfp
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
@@ -130,6 +135,13 @@ def background_noise(
     """
     Fit background noise model to the data
     """
+
+    background_priors = {
+        "lengthscales": Parameter(
+            to_default_float(7.1),
+            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
+        )
+    }
 
     return zeros(M), [NoiseModel({})]
 
