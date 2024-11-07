@@ -6,12 +6,15 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, zeros
+from numpy import float64, int32, max, zeros, mean
 from numpy.typing import NDArray
+from tensorflow import Tensor, sqrt, multiply
 
 from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
 from gpflow import Parameter
 from gpflow.utilities import to_default_float
+from gpflow.models import GPR
+import gpflow.optimizers as optimizers
 
 import tensorflow_probability as tfp
 
@@ -37,8 +40,11 @@ class GaussianProcess(GaussianProcessBase):
         self,
         X: Ndarray,
         full_cov: bool = False,
-    ) -> Tuple[Ndarray, Ndarray]:
-        raise NotImplementedError
+    ) -> Tuple[Tensor, Tensor]:
+        if not hasattr(self, "fit_gp"):
+            raise ValueError("Model has not been fit yet.")
+
+        return self.fit_gp.predict_y(X, full_cov=full_cov)
 
     def fit(
         self,
@@ -46,7 +52,15 @@ class GaussianProcess(GaussianProcessBase):
         y: Ndarray,
         verbose: bool = False,
     ):
-        raise NotImplementedError
+        self.fit_gp = GPR((X, y), kernel=self.kernel)
+        self.X, self.y = X, y
+        opt = optimizers.Scipy()
+
+        opt_logs = opt.minimize(
+            self.fit_gp.training_loss,
+            self.fit_gp.trainable_variables,
+            options=dict(maxiter=100),
+        )
 
     def log_likelihood(
         self,
@@ -60,7 +74,28 @@ class GaussianProcess(GaussianProcessBase):
         y: Optional[Ndarray] = None,
         plot_sd: bool = False,
     ):
-        raise NotImplementedError
+        # check if fit_gp exists
+        if not hasattr(self, "fit_gp"):
+            raise AttributeError("Please fit the model first")
+
+        # default X and y_true values
+        if X is None:
+            X = self.X
+            mean, std = self(X)
+            std = multiply(std, 2.0)
+
+        if y is None:
+            y = self.y
+
+        print(X.shape, y.shape)
+        # plot
+        plt.plot(X, mean, zorder=1, c="k", label="Fit GP")
+        if plot_sd:
+            plt.plot(X, mean + std, zorder=0, c="r")
+            plt.plot(X, mean - std, zorder=0, c="r")
+
+        if y is not None:
+            plt.plot(X, y, zorder=0, c="b", label="True data")
 
 
 # -----------------------------------------#
@@ -116,7 +151,7 @@ class NoiseModel(GaussianProcess):
 
 
 def detrend(
-    X: NDArray[float64], y: NDArray[float64]
+    X: NDArray[float64], y: NDArray[float64], detrend_lengthscale: float
 ) -> Tuple[NDArray[float64], NoiseModel]:
     """
     Detrend stochastic process using RBF process
@@ -128,10 +163,10 @@ def detrend(
 def background_noise(
     X: Ndarray,
     bckgd: Ndarray,
-    bkcgd_length: Ndarray,
+    bckgd_length: Ndarray,
     M: int,
     verbose: bool = False,
-) -> Tuple[NDArray[float64], List[NoiseModel]]:
+) -> Tuple[float64, List[NoiseModel]]:
     """
     Fit background noise model to the data
     """
@@ -143,7 +178,25 @@ def background_noise(
         )
     }
 
-    return zeros(M), [NoiseModel({})]
+    std_array = zeros(M, dtype=float64)
+    models = []
+
+    for i in range(M):
+        X_curr = X[: bckgd_length[i]]
+        y_curr = bckgd[: bckgd_length[i], i, None]
+        y_curr = y_curr - mean(y_curr)
+
+        noise_model = NoiseModel(background_priors)
+        noise_model.fit(X_curr, y_curr, verbose=verbose)
+
+        std_array[i] = noise_model.fit_gp.kernel.variance**0.5
+        models.append(noise_model)
+    std = mean(std_array)
+
+    print("Background noise model:")
+    print(f"Standard deviation: {std}")
+
+    return std, models
 
 
 def assign_priors(kernel: Kernel, priors: GPPriors):

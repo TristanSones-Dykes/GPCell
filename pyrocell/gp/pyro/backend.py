@@ -264,19 +264,12 @@ class GaussianProcess(GaussianProcessBase):
         if X is None:
             X = self.X_true
             mean, std = self.mean, self.var.sqrt()
-        else:
-            if not isinstance(X, Tensor):
-                raise TypeError("Input domain must be a tensor")
-
         if y_true is None:
             y_true = self.y_true
-        else:
-            if not isinstance(y_true, Tensor):
-                raise TypeError("Target values must be tensors")
 
         # plot
         plt.plot(X, mean, zorder=1, c="k", label="Fit GP")
-        if plot_sd:
+        if not plot_sd:
             plt.plot(X, mean + 2 * std, zorder=0, c="r")
             plt.plot(X, mean - 2 * std, zorder=0, c="r")
 

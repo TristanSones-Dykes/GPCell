@@ -101,28 +101,19 @@ class OscillatorDetector:
             print("\n")
             print("Fitting background noise...")
 
-        # --- data preprocessing --- #
-
-        # centre all data
-        for i in range(self.N):
-            y_curr = self.y_all[: self.y_length[i], i]
-            y_curr -= mean(y_curr)
-        for i in range(self.M):
-            y_curr = self.bckgd[: self.bckgd_length[i], i]
-            y_curr -= mean(y_curr)
-
         # --- background noise --- #
         self.bckgd_std, self.bckgd_models = background_noise(
             self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose
         )
 
-        # plot and start next step
+        # plot
         if "background" in plots:
             self.plot("background")
+
+        # --- detrend and denoise cell data --- #
         if verbose:
             print("\nDetrending and denoising cell data...")
 
-        # --- detrend and denoise cell data --- #
         self.model_detrend: List[Optional[GaussianProcess]] = [None] * self.N
         self.y_detrend: List[Optional[NDArray[float64]]] = [None] * self.N
         self.noise_detrend: List[Optional[NDArray[float64]]] = [None] * self.N
@@ -130,24 +121,21 @@ class OscillatorDetector:
         self.OU_LL: List[Optional[NDArray[float64]]] = [None] * self.N
         self.OUosc_LL: List[Optional[NDArray[float64]]] = [None] * self.N
 
-        if "detrend" in plots:
-            self.plot("detrend")
-
     def plot(self, target: str):
         """
         Plot the data
 
         :param str target: String or List of strings describing plot types
         """
-        plot_size = 15 / 5
+        plot_size = int(15 / 5)
         if target == "background":
             # generate grid for background models
-            dim = ceil(sqrt(self.M))
+            dim = int(ceil(sqrt(self.M)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, m in enumerate(self.bckgd_models):
                 plt.subplot(dim, dim, i + 1)
-                m.test_plot(plot_sd=True)
+                m.test_plot(plot_sd=False)
                 plt.title(f"Background {i+1}")
 
             plt.legend()
@@ -171,4 +159,3 @@ class OscillatorDetector:
                 plt.plot(self.time[: self.y_length[i]], y_detrended, label="Detrended")
 
                 plt.title(f"Cell {i+1}")
-            plt.legend()

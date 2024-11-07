@@ -19,3 +19,4 @@ dependencies:
   - tensorflow
   - tensorflow-probability
   - gpflow
+  - tf-keras
