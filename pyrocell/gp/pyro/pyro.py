@@ -5,43 +5,40 @@ from typing import Callable, List, Optional, Tuple
 import matplotlib.pyplot as plt
 import pandas as pd
 import torch
+from pyro import clear_param_store
+from pyro.contrib.gp.kernels import RBF, Cosine, Exponential, Product
+
+# --- Pyro Imports --- #
+# Gaussian processes
+from pyro.contrib.gp.models import GPRegression
+from pyro.distributions.constraints import greater_than
+from pyro.infer import Trace_ELBO
+
+# Primitives and utilities
+from pyro.nn import PyroParam, PyroSample  # noqa: F401
 
 # Direct Namespace Imports
 from torch import (
     Tensor,
     clone,
-    tensor,
-    no_grad,
-    zeros,
-    mean,
-    sqrt,
     eye,
-    matmul,
-    logdet,
     log,
+    logdet,
+    matmul,
+    mean,
+    no_grad,
     pi,
+    sqrt,
+    tensor,
+    zeros,
 )
-from torch.linalg import solve
+from torch.linalg import LinAlgError, solve
 from torch.optim import LBFGS
-from torch.linalg import LinAlgError
 
-
-# --- Pyro Imports --- #
-# Gaussian processes
-from pyro.contrib.gp.models import GPRegression
-from pyro.contrib.gp.kernels import Cosine, RBF, Product, Exponential
-
-# Primitives and utilities
-from pyro.nn import PyroParam, PyroSample  # noqa: F401
-from pyro.distributions.constraints import greater_than
-from pyro.infer import Trace_ELBO
-from pyro import clear_param_store
-
+from ...types import PyroKernel, PyroOptimiser, PyroPriors, TensorLike
 
 # Internal Project Imports
 from .. import GaussianProcessBase
-from ...types import PyroOptimiser, PyroKernel, PyroPriors, TensorLike
-
 
 # -------------------------------- #
 # --- Gaussian Process classes --- #

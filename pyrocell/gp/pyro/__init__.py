@@ -4,17 +4,18 @@ from typing import List, Optional, cast
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
+from pyro.distributions import Uniform
+from pyro.infer import Trace_ELBO
 
 # Direct Namespace Imports
 from pyro.nn.module import PyroSample
-from pyro.distributions import Uniform
-from pyro.infer import Trace_ELBO
-from torch import no_grad, tensor, Tensor, std, mean
+from torch import Tensor, mean, no_grad, std, tensor
+
+from pyrocell.gp import GaussianProcessBase
+from pyrocell.gp.gpflow import gpflow as gpflow_gp
 
 # Internal Project Imports
 from pyrocell.gp.pyro import pyro as pyro_gp
-from pyrocell.gp.gpflow import gpflow as gpflow_gp
-from pyrocell.gp import GaussianProcessBase
 
 
 class OscillatorDetector:

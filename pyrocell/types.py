@@ -1,17 +1,14 @@
 # Standard Library Imports
-from typing import Callable, Union, Mapping
+from typing import Callable, Mapping, Union
 
-# Third-Party Library Imports
-
-# Direct Namespace Imports
-from torch import Tensor
-
-from numpy.typing import NDArray
 from numpy import float64, int32
-
-from pyro.contrib.gp.kernels import Isotropy, Product, RBF, Cosine, Exponential
+from numpy.typing import NDArray
+from pyro.contrib.gp.kernels import RBF, Cosine, Exponential, Isotropy, Product
 from pyro.nn import PyroParam, PyroSample
 
+# Third-Party Library Imports
+# Direct Namespace Imports
+from torch import Tensor
 
 # Internal Project Imports
 

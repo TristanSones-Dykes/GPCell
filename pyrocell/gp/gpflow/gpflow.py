@@ -6,14 +6,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import max, ndarray, zeros
-from numpy import float64, int32
+from numpy import float64, int32, max, ndarray, zeros
 from numpy.typing import NDArray
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
 from pyrocell.types import TensorLike, check_types
-
 
 # -------------------------------- #
 # --- Gaussian Process classes --- #
