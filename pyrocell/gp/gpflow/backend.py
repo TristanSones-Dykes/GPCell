@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, zeros, mean
+from numpy import float64, int32, max, zeros, mean, shape, nonzero
 from numpy.typing import NDArray
 from tensorflow import Tensor, sqrt, multiply
 
@@ -52,15 +52,24 @@ class GaussianProcess(GaussianProcessBase):
         y: Ndarray,
         verbose: bool = False,
     ):
-        self.fit_gp = GPR((X, y), kernel=self.kernel)
+        gp_reg = GPR((X, y), kernel=self.kernel, mean_function=None)
+        gp_reg.kernel.lengthscales = Parameter(
+            to_default_float(7.1),
+            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
+        )
+
         self.X, self.y = X, y
         opt = optimizers.Scipy()
 
         opt_logs = opt.minimize(
-            self.fit_gp.training_loss,
-            self.fit_gp.trainable_variables,
+            gp_reg.training_loss,
+            gp_reg.trainable_variables,
             options=dict(maxiter=100),
         )
+
+        self.mean, self.var = gp_reg.predict_y(X, full_cov=False)
+        self.noise = gp_reg.likelihood.variance**0.5
+        self.fit_gp = gp_reg
 
     def log_likelihood(
         self,
@@ -70,32 +79,29 @@ class GaussianProcess(GaussianProcessBase):
 
     def test_plot(
         self,
-        X: Optional[Ndarray] = None,
-        y: Optional[Ndarray] = None,
+        X_y: Optional[Tuple[Ndarray, Ndarray]] = None,
         plot_sd: bool = False,
     ):
         # check if fit_gp exists
         if not hasattr(self, "fit_gp"):
             raise AttributeError("Please fit the model first")
 
-        # default X and y_true values
-        if X is None:
-            X = self.X
-            mean, std = self(X)
-            std = multiply(std, 2.0)
+        # check if X is None
+        if X_y is None:
+            X, y = self.X, self.y
+            mean, var = self.mean, self.var
+        else:
+            X, y = X_y
+            mean, var = self(X, full_cov=False)
+        std = multiply(sqrt(var), 2.0)
 
-        if y is None:
-            y = self.y
-
-        print(X.shape, y.shape)
         # plot
         plt.plot(X, mean, zorder=1, c="k", label="Fit GP")
+        plt.plot(X, y, zorder=1, c="b", label="True Data")
+
         if plot_sd:
             plt.plot(X, mean + std, zorder=0, c="r")
             plt.plot(X, mean - std, zorder=0, c="r")
-
-        if y is not None:
-            plt.plot(X, y, zorder=0, c="b", label="True data")
 
 
 # -----------------------------------------#
@@ -140,7 +146,7 @@ class NoiseModel(GaussianProcess):
     @override
     def __init__(self, priors: GPPriors):
         kernel = SquaredExponential()
-        assign_priors(kernel, priors)
+        # assign_priors(kernel, priors)
 
         super().__init__(kernel)
 
@@ -175,7 +181,7 @@ def background_noise(
         "lengthscales": Parameter(
             to_default_float(7.1),
             transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        )
+        ),
     }
 
     std_array = zeros(M, dtype=float64)
@@ -184,12 +190,18 @@ def background_noise(
     for i in range(M):
         X_curr = X[: bckgd_length[i]]
         y_curr = bckgd[: bckgd_length[i], i, None]
+
         y_curr = y_curr - mean(y_curr)
 
         noise_model = NoiseModel(background_priors)
         noise_model.fit(X_curr, y_curr, verbose=verbose)
 
-        std_array[i] = noise_model.fit_gp.kernel.variance**0.5
+        if verbose:
+            print(
+                f"Background noise model {i} lengthscale: {noise_model.kernel.lengthscales}"
+            )
+
+        std_array[i] = noise_model.noise
         models.append(noise_model)
     std = mean(std_array)
 
@@ -247,22 +259,25 @@ def load_data(
     time = df["Time (h)"].values[:, None]
 
     bckgd = df[bckgd_cols].values
-    M = bckgd.shape[1]
+    M = shape(bckgd)[1]
 
     bckgd_length = zeros(M, dtype=int32)
 
     for i in range(M):
         bckgd_curr = bckgd[:, i]
-        bckgd_length[i] = max(bckgd_curr)
+        bckgd_length[i] = max(nonzero(bckgd_curr))
 
     y_all = df[data_cols].values
 
-    N = y_all.shape[1]
+    N = shape(y_all)[1]
+
+    y_all = df[data_cols].values
+    max(nonzero(y_all))
 
     y_length = zeros(N, dtype=int32)
 
     for i in range(N):
         y_curr = y_all[:, i]
-        y_length[i] = max(y_curr)
+        y_length[i] = max(nonzero(y_curr))
 
     return time, bckgd, bckgd_length, M, y_all, y_length, N

@@ -135,7 +135,7 @@ class OscillatorDetector:
 
             for i, m in enumerate(self.bckgd_models):
                 plt.subplot(dim, dim, i + 1)
-                m.test_plot(plot_sd=False)
+                m.test_plot(plot_sd=True)
                 plt.title(f"Background {i+1}")
 
             plt.legend()
