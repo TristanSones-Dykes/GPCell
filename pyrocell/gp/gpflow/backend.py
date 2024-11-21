@@ -32,8 +32,9 @@ class GaussianProcess(GaussianProcessBase):
     Gaussian Process model using GPflow.
     """
 
-    def __init__(self, kernel: Kernel):
+    def __init__(self, kernel: Kernel, priors: GPPriors):
         self.kernel = kernel
+        self.priors = priors
         """Kernel for the Gaussian Process"""
 
     def __call__(
@@ -53,10 +54,7 @@ class GaussianProcess(GaussianProcessBase):
         verbose: bool = False,
     ):
         gp_reg = GPR((X, y), kernel=self.kernel, mean_function=None)
-        gp_reg.kernel.lengthscales = Parameter(
-            to_default_float(7.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        )
+        assign_priors(gp_reg.kernel, self.priors)
 
         self.X, self.y = X, y
         opt = optimizers.Scipy()
@@ -117,9 +115,8 @@ class OU(GaussianProcess):
     @override
     def __init__(self, priors: GPPriors):
         matern = Matern12()
-        assign_priors(matern, priors)
 
-        super().__init__(matern)
+        super().__init__(matern, priors)
 
 
 class OUosc(GaussianProcess):
@@ -130,12 +127,9 @@ class OUosc(GaussianProcess):
     @override
     def __init__(self, ou_priors: GPPriors, osc_priors: GPPriors):
         matern = Matern12()
-        assign_priors(matern, ou_priors)
-
         osc = Cosine()
-        assign_priors(osc, osc_priors)
 
-        super().__init__(matern * osc)
+        super().__init__(matern * osc, ou_priors)
 
 
 class NoiseModel(GaussianProcess):
@@ -146,9 +140,8 @@ class NoiseModel(GaussianProcess):
     @override
     def __init__(self, priors: GPPriors):
         kernel = SquaredExponential()
-        # assign_priors(kernel, priors)
 
-        super().__init__(kernel)
+        super().__init__(kernel, priors)
 
 
 # -------------------------------- #
@@ -157,13 +150,35 @@ class NoiseModel(GaussianProcess):
 
 
 def detrend(
-    X: NDArray[float64], y: NDArray[float64], detrend_lengthscale: float
+    X: NDArray[float64],
+    y: NDArray[float64],
+    detrend_lengthscale: float,
+    verbose: bool = False,
 ) -> Tuple[NDArray[float64], NoiseModel]:
     """
     Detrend stochastic process using RBF process
     """
+    # create model and set priors
+    detrend_priors = {
+        "lengthscales": Parameter(
+            to_default_float(7.1),
+            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
+        ),
+    }
+    m = NoiseModel(detrend_priors)
 
-    return zeros(y.shape[0]), NoiseModel({})
+    # fit model and extract mean
+    m.fit(X, y)
+    if verbose:
+        print(f"Lengthscale: {m.fit_gp.kernel.lengthscales}")
+
+    trend = m.mean
+
+    # detrend and centre
+    y_detrended = y - trend
+    y_detrended = y_detrended - mean(y_detrended)
+
+    return y_detrended, m
 
 
 def background_noise(
@@ -195,11 +210,6 @@ def background_noise(
 
         noise_model = NoiseModel(background_priors)
         noise_model.fit(X_curr, y_curr, verbose=verbose)
-
-        if verbose:
-            print(
-                f"Background noise model {i} lengthscale: {noise_model.kernel.lengthscales}"
-            )
 
         std_array[i] = noise_model.noise
         models.append(noise_model)

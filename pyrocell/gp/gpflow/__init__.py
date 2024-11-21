@@ -5,7 +5,7 @@ from typing import List, Optional, cast
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import ceil, float64, mean, sqrt
+from numpy import ceil, float64, mean, std, sqrt
 from numpy.typing import NDArray
 
 # Internal Project Imports
@@ -110,16 +110,34 @@ class OscillatorDetector:
         if "background" in plots:
             self.plot("background")
 
-        # --- detrend and denoise cell data --- #
+        # --- detrend --- #
         if verbose:
             print("\nDetrending and denoising cell data...")
 
         self.model_detrend: List[Optional[GaussianProcess]] = [None] * self.N
         self.y_detrend: List[Optional[NDArray[float64]]] = [None] * self.N
-        self.noise_detrend: List[Optional[NDArray[float64]]] = [None] * self.N
+        self.noise_detrend: List[Optional[float64]] = [None] * self.N
         self.LLR_list: List[Optional[NDArray[float64]]] = [None] * self.N
         self.OU_LL: List[Optional[NDArray[float64]]] = [None] * self.N
         self.OUosc_LL: List[Optional[NDArray[float64]]] = [None] * self.N
+
+        for i in range(self.N):
+            X_curr = self.time[: self.y_length[i]]
+            y_curr = self.y_all[: self.y_length[i], i, None]
+
+            # centre and standardize, adjust noise, detrend
+            y_curr = (y_curr - mean(y_curr)) / std(y_curr)
+            noise = self.bckgd_std / std(y_curr)
+            y_detrended, m = detrend(X_curr, y_curr, 7.0, verbose=verbose)
+
+            self.model_detrend[i], self.y_detrend[i], self.noise_detrend[i] = (
+                m,
+                y_detrended,
+                noise,
+            )
+
+        if "detrend" in plots:
+            self.plot("detrend")
 
     def plot(self, target: str):
         """
@@ -142,7 +160,7 @@ class OscillatorDetector:
             plt.tight_layout()
         elif target == "detrend":
             # square grid of cells
-            dim = ceil(sqrt(sum([1 for i in self.model_detrend if i is not None])))
+            dim = int(ceil(sqrt(sum([1 for i in self.model_detrend if i is not None]))))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i in range(self.N):
