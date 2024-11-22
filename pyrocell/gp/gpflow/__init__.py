@@ -143,7 +143,10 @@ class OscillatorDetector:
         """
         Plot the data
 
-        :param str target: String or List of strings describing plot types
+        Parameters
+        ----------
+        target : str
+            Type of plot to generate
         """
         plot_size = int(15 / 5)
         if target == "background":

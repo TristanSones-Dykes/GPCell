@@ -43,7 +43,7 @@ from .. import GaussianProcessBase
 
 class GaussianProcess(GaussianProcessBase):
     """
-    Gaussian Process class for fitting and evaluating parameters
+    Gaussian Process model using Pyro.
     """
 
     def __init__(

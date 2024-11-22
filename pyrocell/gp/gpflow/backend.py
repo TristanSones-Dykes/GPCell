@@ -1,5 +1,6 @@
 # Standard Library Imports
 from typing import List, Optional, Tuple, override
+from copy import deepcopy
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ from tensorflow import Tensor, sqrt, multiply
 
 from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
 from gpflow import Parameter
-from gpflow.utilities import to_default_float
+from gpflow.utilities import to_default_float, print_summary
 from gpflow.models import GPR
 import gpflow.optimizers as optimizers
 
@@ -33,7 +34,7 @@ class GaussianProcess(GaussianProcessBase):
     """
 
     def __init__(self, kernel: Kernel, priors: GPPriors):
-        self.kernel = kernel
+        self.kernel = deepcopy(kernel)
         self.priors = priors
         """Kernel for the Gaussian Process"""
 
@@ -42,6 +43,22 @@ class GaussianProcess(GaussianProcessBase):
         X: Ndarray,
         full_cov: bool = False,
     ) -> Tuple[Tensor, Tensor]:
+        """
+        Evaluate the Gaussian Process on the input domain
+
+        Parameters
+        ----------
+        X: Tensor
+            Input domain
+        full_cov: bool
+            Return full covariance matrix
+
+        Returns
+        -------
+        Tuple[Tensor, Tensor]
+            Mean and standard deviation
+
+        """
         if not hasattr(self, "fit_gp"):
             raise ValueError("Model has not been fit yet.")
 
@@ -53,6 +70,24 @@ class GaussianProcess(GaussianProcessBase):
         y: Ndarray,
         verbose: bool = False,
     ):
+        """
+        Fit the Gaussian Process model, saves the model and training values for later use if needed.
+
+        Parameters
+        ----------
+        X: Tensor
+            Input domain
+        y: Tensor
+            Target values
+        verbose: bool
+            Print training information
+
+        Returns
+        -------
+        bool
+            Success status
+        """
+
         gp_reg = GPR((X, y), kernel=self.kernel, mean_function=None)
         assign_priors(gp_reg.kernel, self.priors)
 
@@ -73,6 +108,21 @@ class GaussianProcess(GaussianProcessBase):
         self,
         y: Optional[Ndarray] = None,
     ) -> Ndarray:
+        """
+        Calculates the log-marginal likelihood for the Gaussian process.
+        If no target values are input, calculates log likelihood for data is was it on.
+
+        Parameters
+        ----------
+        y: Optional[Tensor]
+            Observed target values
+
+        Returns
+        -------
+        Tensor
+            Log-likelihood
+        """
+
         raise NotImplementedError
 
     def test_plot(
@@ -80,6 +130,17 @@ class GaussianProcess(GaussianProcessBase):
         X_y: Optional[Tuple[Ndarray, Ndarray]] = None,
         plot_sd: bool = False,
     ):
+        """
+        Create a test plot of the fitted model on the training data
+
+        Parameters
+        ----------
+        X_y: Optional[Tuple[Tensor, Tensor]]
+            Input domain and target values
+        plot_sd: bool
+            Plot standard deviation
+        """
+
         # check if fit_gp exists
         if not hasattr(self, "fit_gp"):
             raise AttributeError("Please fit the model first")
@@ -157,6 +218,22 @@ def detrend(
 ) -> Tuple[NDArray[float64], NoiseModel]:
     """
     Detrend stochastic process using RBF process
+
+    Parameters
+    ----------
+    X: Tensor
+        Input domain
+    y: Tensor
+        Target values
+    detrend_lengthscale: float
+        Lengthscale of the detrending process
+    verbose: bool
+        Print information
+
+    Returns
+    -------
+    Tuple[Tensor, Tensor, Tensor]
+        detrended values and noise model
     """
     # create model and set priors
     detrend_priors = {
@@ -189,7 +266,25 @@ def background_noise(
     verbose: bool = False,
 ) -> Tuple[float64, List[NoiseModel]]:
     """
-    Fit background noise model to the data
+    Fit a background noise model to the data
+
+    Parameters
+    ----------
+    X: Tensor
+        Input domain
+    bckgd: Tensor
+        Background traces
+    bckgd_length: Tensor
+        Length of each background trace
+    M: int
+        Count of background regions
+    verbose: bool
+        Print information
+
+    Returns
+    -------
+    Tuple[Tensor, list[NoiseModel]]
+        Standard deviation of the overall noise, list of noise models
     """
 
     background_priors = {
@@ -224,6 +319,13 @@ def background_noise(
 def assign_priors(kernel: Kernel, priors: GPPriors):
     """
     Assign priors to kernel hyperparameters
+
+    Parameters
+    ----------
+    kernel: Kernel
+        Kernel to assign priors to
+    priors: GPPriors
+        Priors for the kernel hyperparameters
     """
     for key, prior in priors.items():
         attribute = getattr(kernel, key)
