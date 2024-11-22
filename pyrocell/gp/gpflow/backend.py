@@ -3,6 +3,7 @@ from typing import Optional, Tuple, override
 from copy import deepcopy
 
 # Third-Party Library Imports
+from gpflow import Parameter
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
@@ -29,9 +30,11 @@ class GaussianProcess(GaussianProcessBase):
     Gaussian Process model using GPflow.
     """
 
-    def __init__(self, kernel: Kernel, priors: GPPriors):
-        self.kernel = deepcopy(kernel)
-        self.priors = priors
+    def __init__(self, *args, **kwargs):
+        if kwargs.get("kernel", None) is None:
+            raise ValueError("Please provide a kernel for the Gaussian Process")
+
+        self.kernel = deepcopy(kwargs["kernel"])
         """Kernel for the Gaussian Process"""
 
     def __call__(
@@ -85,9 +88,9 @@ class GaussianProcess(GaussianProcessBase):
         """
 
         gp_reg = GPR((X, y), kernel=deepcopy(self.kernel), mean_function=None)
-        assign_priors(gp_reg.kernel, self.priors)
 
-        print_summary(gp_reg)
+        if verbose:
+            print_summary(gp_reg)
 
         self.X, self.y = X, y
         opt = optimizers.Scipy()
@@ -97,6 +100,9 @@ class GaussianProcess(GaussianProcessBase):
             gp_reg.trainable_variables,
             options=dict(maxiter=100),
         )
+
+        if verbose:
+            print(gp_reg.parameters)
 
         self.mean, self.var = gp_reg.predict_y(X, full_cov=False)
         self.noise = gp_reg.likelihood.variance**0.5
@@ -175,7 +181,7 @@ class OU(GaussianProcess):
     def __init__(self, priors: GPPriors):
         matern = Matern12()
 
-        super().__init__(matern, priors)
+        super().__init__(kernel=matern)
 
 
 class OUosc(GaussianProcess):
@@ -188,7 +194,7 @@ class OUosc(GaussianProcess):
         matern = Matern12()
         osc = Cosine()
 
-        super().__init__(matern * osc, ou_priors)
+        super().__init__(kernel=matern + osc)
 
 
 class NoiseModel(GaussianProcess):
@@ -197,10 +203,13 @@ class NoiseModel(GaussianProcess):
     """
 
     @override
-    def __init__(self, priors: GPPriors):
+    def __init__(self, lengthscale: Optional[Parameter] = None):
         kernel = SquaredExponential()
 
-        super().__init__(kernel, priors)
+        if lengthscale is not None:
+            kernel.lengthscales.assign(lengthscale)
+
+        super().__init__(kernel=kernel)
 
 
 # -------------------------------- #

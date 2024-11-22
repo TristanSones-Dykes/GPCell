@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Type
 from copy import deepcopy
 
 # Third-Party Library Imports
@@ -19,12 +19,65 @@ import tensorflow_probability as tfp
 
 # Internal Project Imports
 from pyrocell.types import Ndarray, GPPriors
-from pyrocell.gp.gpflow.backend import NoiseModel
+from pyrocell.gp.gpflow.backend import GaussianProcess, NoiseModel
 
 
-# ----------------------------------------#
-# --- Pyrocell example user functions --- #
-# ----------------------------------------#
+# -----------------------------------#
+# --- Pyrocell utility functions --- #
+# -----------------------------------#
+
+
+def fit_models(
+    X: Ndarray,
+    Y: Ndarray,
+    Y_lengths: NDArray[int32],
+    model: Type[GaussianProcess],
+    priors: GPPriors,
+    preprocess: int = 0,
+    verbose: bool = False,
+) -> List[Optional[GaussianProcess]]:
+    """
+    Fit a Gaussian Process model to each trace
+
+    Parameters
+    ----------
+    X: Ndarray
+        Input domain
+    Y: Ndarray
+        Input traces
+    Y_lengths: Ndarray
+        Length of each trace
+    model: GaussianProcess
+        Gaussian Process model
+    priors: GPPriors
+        Priors for the kernel hyperparameters
+    preprocess: int
+        Preprocessing option (0: None, 1: Centre, 2: Standardise)
+    verbose: bool
+        Print information
+
+    Returns
+    -------
+    List[GaussianProcess]]
+        List of fitted models
+    """
+    models = []
+
+    for i in range(len(Y_lengths)):
+        X_curr = X[: Y_lengths[i]]
+        y_curr = Y[: Y_lengths[i], i, None]
+
+        if preprocess == 1:
+            y_curr = y_curr - mean(y_curr)
+        elif preprocess == 2:
+            y_curr = (y_curr - mean(y_curr)) / std(y_curr)
+
+        m = model(**priors)
+        m.fit(X_curr, y_curr, verbose=verbose)
+
+        models.append(m)
+
+    return models
 
 
 def detrend(
@@ -91,7 +144,7 @@ def detrend(
 
         y_trend, var = gpr.predict_f(X_curr)
 
-        m = NoiseModel({})
+        m = NoiseModel()
         m.X = X_curr
         m.y = y_curr
         m.mean, m.var = y_trend, var
@@ -119,8 +172,7 @@ def detrend(
 def background_noise(
     X: Ndarray,
     Y: Ndarray,
-    Y_lengths: Ndarray,
-    M: int,
+    Y_lengths: NDArray[int32],
     verbose: bool = False,
 ) -> Tuple[float64, List[NoiseModel]]:
     """
@@ -132,7 +184,7 @@ def background_noise(
         Input domain
     Y: Ndarray
         Input traces
-    Y_lengths: Ndarray
+    Y_lengths: NDArray[int32]
         Length of each trace
     verbose: bool
         Print information
@@ -142,32 +194,29 @@ def background_noise(
     Tuple[Tensor, list[NoiseModel]]
         Standard deviation of the overall noise, list of noise models
     """
+    std_array = zeros(len(Y_lengths), dtype=float64)
 
-    background_priors = {
-        "lengthscales": Parameter(
+    priors = {
+        "lengthscale": Parameter(
             to_default_float(7.1),
             transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
         ),
     }
-
-    std_array = zeros(M, dtype=float64)
-    models = []
+    models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 1, verbose)
 
     for i in range(len(Y_lengths)):
-        X_curr = X[: Y_lengths[i]]
-        y_curr = Y[: Y_lengths[i], i, None]
+        noise_model = models[i]
 
-        y_curr = y_curr - mean(y_curr)
-
-        noise_model = NoiseModel(background_priors)
-        noise_model.fit(X_curr, y_curr, verbose=verbose)
+        if noise_model is None:
+            continue
 
         std_array[i] = noise_model.noise
-        models.append(noise_model)
+
     std = mean(std_array)
 
-    print("Background noise model:")
-    print(f"Standard deviation: {std}")
+    if verbose:
+        print("Background noise model:")
+        print(f"Standard deviation: {std}")
 
     return std, models
 

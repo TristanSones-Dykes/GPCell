@@ -99,7 +99,7 @@ class OscillatorDetector:
 
         # --- background noise --- #
         self.bckgd_std, self.bckgd_models = background_noise(
-            self.time, self.bckgd, self.bckgd_length, self.M, verbose=verbose
+            self.time, self.bckgd, self.bckgd_length, verbose=verbose
         )
 
         # plot
