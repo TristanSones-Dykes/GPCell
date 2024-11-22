@@ -1,19 +1,15 @@
 # Standard Library Imports
-from typing import List, Optional, cast
+from typing import List, Optional
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import ceil, float64, mean, std, sqrt
+from numpy import ceil, float64, sqrt
 from numpy.typing import NDArray
 
 # Internal Project Imports
-from pyrocell.gp.gpflow.backend import (
-    OU,
-    GaussianProcess,
-    NoiseModel,
-    OUosc,
+from pyrocell.gp.gpflow.utils import (
     background_noise,
     detrend,
     load_data,
@@ -114,30 +110,17 @@ class OscillatorDetector:
         if verbose:
             print("\nDetrending and denoising cell data...")
 
-        self.model_detrend: List[Optional[GaussianProcess]] = [None] * self.N
-        self.y_detrend: List[Optional[NDArray[float64]]] = [None] * self.N
+        self.y_detrend, self.model_detrend = detrend(
+            self.time, self.y_all, self.y_length, 7.0, verbose=verbose
+        )
+
+        if "detrend" in plots:
+            self.plot("detrend")
+
         self.noise_detrend: List[Optional[float64]] = [None] * self.N
         self.LLR_list: List[Optional[NDArray[float64]]] = [None] * self.N
         self.OU_LL: List[Optional[NDArray[float64]]] = [None] * self.N
         self.OUosc_LL: List[Optional[NDArray[float64]]] = [None] * self.N
-
-        for i in range(self.N):
-            X_curr = self.time[: self.y_length[i]]
-            y_curr = self.y_all[: self.y_length[i], i, None]
-
-            # centre and standardize, adjust noise, detrend
-            y_curr = (y_curr - mean(y_curr)) / std(y_curr)
-            noise = self.bckgd_std / std(y_curr)
-            y_detrended, m = detrend(X_curr, y_curr, 7.0, verbose=verbose)
-
-            self.model_detrend[i], self.y_detrend[i], self.noise_detrend[i] = (
-                m,
-                y_detrended,
-                noise,
-            )
-
-        if "detrend" in plots:
-            self.plot("detrend")
 
     def plot(self, target: str):
         """
@@ -167,16 +150,25 @@ class OscillatorDetector:
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i in range(self.N):
-                # check properly fit
-                if not isinstance(self.model_detrend[i], NoiseModel):
-                    continue
+                m = self.model_detrend[i]
+                y_detrended = self.y_detrend[i]
 
-                m = cast(NoiseModel, self.model_detrend[i])
-                y_detrended = cast(NDArray[float64], self.y_detrend[i])
+                # check properly fit
+                if m is None or y_detrended is None:
+                    continue
 
                 # plot
                 plt.subplot(dim, dim, i + 1)
-                m.test_plot()
-                plt.plot(self.time[: self.y_length[i]], y_detrended, label="Detrended")
+                m.test_plot()  # detrended data
+                plt.plot(
+                    self.time[: self.y_length[i]],
+                    y_detrended,
+                    label="Detrended",
+                    color="orange",
+                    linestyle="dashed",
+                )
 
                 plt.title(f"Cell {i+1}")
+
+            plt.legend()
+            plt.tight_layout()

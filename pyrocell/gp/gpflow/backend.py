@@ -1,19 +1,15 @@
 # Standard Library Imports
-from typing import List, Optional, Tuple, override
+from typing import Optional, Tuple, override
 from copy import deepcopy
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
-import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, zeros, mean, shape, nonzero
-from numpy.typing import NDArray
 from tensorflow import Tensor, sqrt, multiply
 
 from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
-from gpflow import Parameter
-from gpflow.utilities import to_default_float, print_summary
+from gpflow.utilities import print_summary
 from gpflow.models import GPR
 import gpflow.optimizers as optimizers
 
@@ -48,7 +44,7 @@ class GaussianProcess(GaussianProcessBase):
 
         Parameters
         ----------
-        X: Tensor
+        X: Ndarray
             Input domain
         full_cov: bool
             Return full covariance matrix
@@ -75,9 +71,9 @@ class GaussianProcess(GaussianProcessBase):
 
         Parameters
         ----------
-        X: Tensor
+        X: Ndarray
             Input domain
-        y: Tensor
+        y: Ndarray
             Target values
         verbose: bool
             Print training information
@@ -88,8 +84,10 @@ class GaussianProcess(GaussianProcessBase):
             Success status
         """
 
-        gp_reg = GPR((X, y), kernel=self.kernel, mean_function=None)
+        gp_reg = GPR((X, y), kernel=deepcopy(self.kernel), mean_function=None)
         assign_priors(gp_reg.kernel, self.priors)
+
+        print_summary(gp_reg)
 
         self.X, self.y = X, y
         opt = optimizers.Scipy()
@@ -114,7 +112,7 @@ class GaussianProcess(GaussianProcessBase):
 
         Parameters
         ----------
-        y: Optional[Tensor]
+        y: Optional[Ndarray]
             Observed target values
 
         Returns
@@ -135,7 +133,7 @@ class GaussianProcess(GaussianProcessBase):
 
         Parameters
         ----------
-        X_y: Optional[Tuple[Tensor, Tensor]]
+        X_y: Optional[Tuple[Ndarray, Ndarray]]
             Input domain and target values
         plot_sd: bool
             Plot standard deviation
@@ -210,112 +208,6 @@ class NoiseModel(GaussianProcess):
 # -------------------------------- #
 
 
-def detrend(
-    X: NDArray[float64],
-    y: NDArray[float64],
-    detrend_lengthscale: float,
-    verbose: bool = False,
-) -> Tuple[NDArray[float64], NoiseModel]:
-    """
-    Detrend stochastic process using RBF process
-
-    Parameters
-    ----------
-    X: Tensor
-        Input domain
-    y: Tensor
-        Target values
-    detrend_lengthscale: float
-        Lengthscale of the detrending process
-    verbose: bool
-        Print information
-
-    Returns
-    -------
-    Tuple[Tensor, Tensor, Tensor]
-        detrended values and noise model
-    """
-    # create model and set priors
-    detrend_priors = {
-        "lengthscales": Parameter(
-            to_default_float(7.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        ),
-    }
-    m = NoiseModel(detrend_priors)
-
-    # fit model and extract mean
-    m.fit(X, y)
-    if verbose:
-        print(f"Lengthscale: {m.fit_gp.kernel.lengthscales}")
-
-    trend = m.mean
-
-    # detrend and centre
-    y_detrended = y - trend
-    y_detrended = y_detrended - mean(y_detrended)
-
-    return y_detrended, m
-
-
-def background_noise(
-    X: Ndarray,
-    bckgd: Ndarray,
-    bckgd_length: Ndarray,
-    M: int,
-    verbose: bool = False,
-) -> Tuple[float64, List[NoiseModel]]:
-    """
-    Fit a background noise model to the data
-
-    Parameters
-    ----------
-    X: Tensor
-        Input domain
-    bckgd: Tensor
-        Background traces
-    bckgd_length: Tensor
-        Length of each background trace
-    M: int
-        Count of background regions
-    verbose: bool
-        Print information
-
-    Returns
-    -------
-    Tuple[Tensor, list[NoiseModel]]
-        Standard deviation of the overall noise, list of noise models
-    """
-
-    background_priors = {
-        "lengthscales": Parameter(
-            to_default_float(7.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        ),
-    }
-
-    std_array = zeros(M, dtype=float64)
-    models = []
-
-    for i in range(M):
-        X_curr = X[: bckgd_length[i]]
-        y_curr = bckgd[: bckgd_length[i], i, None]
-
-        y_curr = y_curr - mean(y_curr)
-
-        noise_model = NoiseModel(background_priors)
-        noise_model.fit(X_curr, y_curr, verbose=verbose)
-
-        std_array[i] = noise_model.noise
-        models.append(noise_model)
-    std = mean(std_array)
-
-    print("Background noise model:")
-    print(f"Standard deviation: {std}")
-
-    return std, models
-
-
 def assign_priors(kernel: Kernel, priors: GPPriors):
     """
     Assign priors to kernel hyperparameters
@@ -330,66 +222,3 @@ def assign_priors(kernel: Kernel, priors: GPPriors):
     for key, prior in priors.items():
         attribute = getattr(kernel, key)
         attribute.assign(prior)
-
-
-# ------------------------ #
-# --- GPflow Utilities --- #
-# ------------------------ #
-
-
-def load_data(
-    path: str,
-) -> Tuple[
-    NDArray[float64],
-    NDArray[float64],
-    NDArray[int32],
-    int,
-    NDArray[float64],
-    NDArray[int32],
-    int,
-]:
-    """
-    Loads experiment data from a csv file. This file must have:
-    - Time (h) column
-    - Cell columns, name starting with 'Cell'
-    - Background columns, name starting with 'Background'
-
-    :param str path: Path to the csv file.
-
-    :return Tuple[NDArray[float64], NDArray[float64], NDArray[int32], int, NDArray[float64], NDArray[int32], int]: Split, formatted experimental data
-    - time: time in hours
-    - bckgd: background time-series data
-    - bckgd_length: length of each background trace
-    - M: count of background regions
-    - y_all: cell time-series data
-    - y_length: length of each cell trace
-    - N: count of cell regions
-    """
-    df = pd.read_csv(path).fillna(0)
-    data_cols = [col for col in df if col.startswith("Cell")]
-    bckgd_cols = [col for col in df if col.startswith("Background")]
-    time = df["Time (h)"].values[:, None]
-
-    bckgd = df[bckgd_cols].values
-    M = shape(bckgd)[1]
-
-    bckgd_length = zeros(M, dtype=int32)
-
-    for i in range(M):
-        bckgd_curr = bckgd[:, i]
-        bckgd_length[i] = max(nonzero(bckgd_curr))
-
-    y_all = df[data_cols].values
-
-    N = shape(y_all)[1]
-
-    y_all = df[data_cols].values
-    max(nonzero(y_all))
-
-    y_length = zeros(N, dtype=int32)
-
-    for i in range(N):
-        y_curr = y_all[:, i]
-        y_length[i] = max(nonzero(y_curr))
-
-    return time, bckgd, bckgd_length, M, y_all, y_length, N
