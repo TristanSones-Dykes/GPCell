@@ -1,18 +1,23 @@
 # Standard Library Imports
-from typing import List, Optional
+from typing import Optional
 
 # Third-Party Library Imports
+from gpflow import Parameter
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import ceil, float64, sqrt
-from numpy.typing import NDArray
+from numpy import array, ceil, sqrt, std
+from numpy.random import uniform
 
 # Internal Project Imports
+from pyrocell.gp.gpflow.models import OU, OUosc
 from pyrocell.gp.gpflow.utils import (
     background_noise,
     detrend,
     load_data,
+    fit_models,
+    fit_models_replicates,
+    pad_zeros,
 )
 
 
@@ -32,7 +37,7 @@ class OscillatorDetector:
 
         if path is not None:
             (
-                self.time,
+                self.X,
                 self.bckgd,
                 self.bckgd_length,
                 self.M,
@@ -58,7 +63,7 @@ class OscillatorDetector:
             Path to the csv file
         """
         (
-            self.time,
+            self.X,
             self.bckgd,
             self.bckgd_length,
             self.M,
@@ -67,7 +72,7 @@ class OscillatorDetector:
             self.N,
         ) = load_data(path)
 
-    def fit_models(self, *args, **kwargs):
+    def run(self, *args, **kwargs):
         """
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
 
@@ -99,8 +104,12 @@ class OscillatorDetector:
 
         # --- background noise --- #
         self.bckgd_std, self.bckgd_models = background_noise(
-            self.time, self.bckgd, self.bckgd_length, verbose=verbose
+            self.X, self.bckgd, self.bckgd_length, verbose=verbose
         )
+        self.noise_list = [
+            self.bckgd_std / std(self.y_all[: self.y_length[i], i, None])
+            for i in range(self.N)
+        ]
 
         # plot
         if "background" in plots:
@@ -111,16 +120,48 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         self.y_detrend, self.model_detrend = detrend(
-            self.time, self.y_all, self.y_length, 3, verbose=verbose
+            self.X, self.y_all, self.y_length, 7.0, verbose=verbose
         )
 
         if "detrend" in plots:
             self.plot("detrend")
 
-        self.noise_detrend: List[Optional[float64]] = [None] * self.N
-        self.LLR_list: List[Optional[NDArray[float64]]] = [None] * self.N
-        self.OU_LL: List[Optional[NDArray[float64]]] = [None] * self.N
-        self.OUosc_LL: List[Optional[NDArray[float64]]] = [None] * self.N
+        # --- OU and OUosc --- #
+
+        # define priors
+        OU_priors = []
+        OUosc_priors = []
+        for i in range(self.N):
+            OU_priors.append(
+                lambda: {
+                    "lengthscale": Parameter(uniform(0.1, 2.0)),
+                    "variance": Parameter(uniform(0.1, 2.0)),
+                    "likelihood_variance": Parameter(self.noise_list[i] ** 2),
+                    "train_likelihood": False,
+                }
+            )
+            OUosc_priors.append(
+                lambda: {
+                    "lengthscale": uniform(0.1, 2.0),
+                    "variance": uniform(0.1, 2.0),
+                    "lengthscale_cos": uniform(0.1, 4.0),
+                    "train_likelihood": False,
+                    "train_osc_variance": False,
+                }
+            )
+
+        # fit models
+        K = 10
+        self.ou_models = fit_models_replicates(
+            K,
+            self.X,
+            pad_zeros(self.y_detrend),
+            self.y_length,
+            OU,
+            OU_priors,
+            2,
+            verbose,
+        )
 
     def plot(self, target: str):
         """
@@ -161,7 +202,7 @@ class OscillatorDetector:
                 plt.subplot(dim, dim, i + 1)
                 m.test_plot()  # detrended data
                 plt.plot(
-                    self.time[: self.y_length[i]],
+                    self.X[: self.y_length[i]],
                     y_detrended,
                     label="Detrended",
                     color="orange",

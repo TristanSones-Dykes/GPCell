@@ -3,8 +3,10 @@
 # Third-Party Library Imports
 
 # Direct Namespace Imports
+from gpflow import set_trainable
 from gpflow.models import GPR
 from gpflow.kernels import SquaredExponential, Matern12, Cosine
+from gpflow.utilities import print_summary
 
 # Internal Project Imports
 from pyrocell.gp.gpflow.backend.types import GPModel, Ndarray
@@ -20,11 +22,57 @@ class OU(GPModel):
     Ornstein-Uhlenbeck process class
     """
 
+    def __call__(self, X: Ndarray, y: Ndarray) -> GPR:
+        kernel = Matern12()
+        model = GPR(data=(X, y), kernel=kernel)
+
+        if self.priors.get("lengthscale", None) is not None:
+            model.kernel.lengthscales = self.priors["lengthscale"]
+
+        if self.priors.get("variance", None) is not None:
+            model.kernel.variance = self.priors["variance"]
+
+        if self.priors.get("likelihood_variance", None) is not None:
+            model.likelihood.variance = self.priors["likelihood_variance"]
+
+        if self.priors.get("train_likelihood", None) is not None:
+            set_trainable(model.likelihood.variance, self.priors["train_likelihood"])  # type: ignore
+
+        print_summary(model)
+
+        return model
+
 
 class OUosc(GPModel):
     """
     Ornstein-Uhlenbeck process with an oscillator (cosine) kernel
     """
+
+    def __call__(self, X: Ndarray, y: Ndarray) -> GPR:
+        kernel = Matern12() + Cosine()
+        model = GPR(data=(X, y), kernel=kernel)
+
+        # Trainable likelihood
+        if self.priors.get("train_likelihood", None) is not None:
+            set_trainable(model.likelihood.variance, self.priors["train_likelihood"])
+
+        if self.priors.get("train_osc_variance", None) is not None:
+            set_trainable(
+                model.kernel.kernels[1].variance, self.priors["train_osc_variance"]
+            )
+
+        # OU priors
+        if self.priors.get("lengthscale", None) is not None:
+            model.kernel.kernels[0].lengthscales = self.priors["lengthscale"]
+
+        if self.priors.get("variance", None) is not None:
+            model.kernel.kernels[0].variance = self.priors["variance"]
+
+        # Cosine priors
+        if self.priors.get("lengthscale_cos", None) is not None:
+            model.kernel.kernels[1].lengthscales = self.priors["lengthscale_cos"]
+
+        return model
 
 
 class NoiseModel(GPModel):

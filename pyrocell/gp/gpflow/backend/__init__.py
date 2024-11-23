@@ -76,23 +76,29 @@ class GaussianProcess(GaussianProcessBase):
             Success status
         """
 
-        gp_reg = self.model(X, y)
+        try:
+            gp_reg = self.model(X, y)
 
-        self.X, self.y = X, y
-        opt = optimizers.Scipy()
+            self.X, self.y = X, y
+            opt = optimizers.Scipy()
 
-        opt_logs = opt.minimize(
-            gp_reg.training_loss,
-            gp_reg.trainable_variables,  # type: ignore
-            options=dict(maxiter=100),
-        )
+            opt_logs = opt.minimize(
+                gp_reg.training_loss,
+                gp_reg.trainable_variables,  # type: ignore
+                options=dict(maxiter=100),
+            )
 
-        if verbose:
-            print(gp_reg.parameters)
+            # if verbose:
+            # print(gp_reg.parameters)
 
-        self.mean, self.var = gp_reg.predict_y(X, full_cov=False)
-        self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
-        self.fit_gp = gp_reg
+            res = gp_reg.predict_y(X, full_cov=False)
+            self.mean = res[0].numpy()
+            self.var = res[1].numpy()
+
+            self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
+            self.fit_gp = gp_reg
+        except:
+            print("Error in fitting the model")
 
     def log_likelihood(
         self,

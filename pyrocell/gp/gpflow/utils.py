@@ -1,11 +1,11 @@
 # Standard Library Imports
-from typing import List, Tuple, Type, Union
+from typing import Callable, List, Sequence, Tuple, Type, Union
 
 # Third-Party Library Imports
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, std, zeros, mean, shape, nonzero
+from numpy import float64, int32, max, std, zeros, mean, shape, nonzero, full
 from numpy.typing import NDArray
 
 from gpflow.kernels import Kernel
@@ -45,10 +45,10 @@ def fit_models(
         Input traces
     Y_lengths: Ndarray
         Length of each trace
-    model: GaussianProcess
-        Gaussian Process model
-    priors: GPPriors
-        Priors for the kernel hyperparameters
+    model: GPModel
+        Model to fit
+    priors: GPPriors | List[GPPriors]
+        Priors for the kernel hyperparameters, or list of priors for each trace
     preprocess: int
         Preprocessing option (0: None, 1: Centre, 2: Standardise)
     verbose: bool
@@ -59,12 +59,12 @@ def fit_models(
     List[GaussianProcess]]
         List of fitted models
     """
-    processes = []
-
     if isinstance(priors, list):
         assert len(priors) == len(Y_lengths)
     else:
         priors = [priors] * len(Y_lengths)
+
+    processes = []
 
     for i, prior in zip(range(len(Y_lengths)), priors):
         X_curr = X[: Y_lengths[i]]
@@ -80,6 +80,89 @@ def fit_models(
         m.fit(X_curr, y_curr, verbose=verbose)
 
         processes.append(m)
+
+    return processes
+
+
+def fit_models_replicates(
+    N: int,
+    X: Ndarray,
+    Y: Ndarray,
+    Y_lengths: NDArray[int32],
+    model: Type[GPModel],
+    prior_gen: Union[Callable[..., GPPriors], List[Callable[..., GPPriors]]],
+    preprocess: int = 0,
+    verbose: bool = False,
+) -> List[List[GaussianProcess]]:
+    """
+    Fit a Gaussian Process model to each trace N times
+
+    Parameters
+    ----------
+    N: int
+        Number of replicates
+    X: Ndarray
+        Input domain
+    Y: Ndarray
+        Input traces
+    Y_lengths: Ndarray
+        Length of each trace
+    model: GPModel
+        Model to fit
+    priors: Callable[..., GPPriors] | List[Callable[..., GPPriors]]
+        Function that generates priors for each replicate, or list of functions for each trace
+    preprocess: int
+        Preprocessing option (0: None, 1: Centre, 2: Standardise)
+    verbose: bool
+        Print information
+
+    Returns
+    -------
+    List[List[GaussianProcess]]
+        List of N fitted models for each trace
+    """
+    if isinstance(prior_gen, list):
+        assert len(prior_gen) == len(Y_lengths)
+        priors = prior_gen
+    else:
+        priors = [prior_gen] * len(Y_lengths)
+
+    # preprocess data
+    if preprocess == 1 or preprocess == 2:
+        Y = Y.copy()
+
+    for i in range(N):
+        if preprocess == 1:
+            Y[: Y_lengths[i], i, None] = Y[: Y_lengths[i], i, None] - mean(
+                Y[: Y_lengths[i], i, None]
+            )
+        elif preprocess == 2:
+            Y[: Y_lengths[i], i, None] = (
+                Y[: Y_lengths[i], i, None] - mean(Y[: Y_lengths[i], i, None])
+            ) / std(Y[: Y_lengths[i], i, None])
+
+    # fit models
+    processes = []
+    for i in range(len(Y_lengths)):
+        # select trace
+        X_curr = X[: Y_lengths[i]]
+        y_curr = Y[: Y_lengths[i], i, None]
+
+        # replicate data
+        replicate_X = pad_zeros([X_curr] * N)
+        replicate_Y = pad_zeros([y_curr] * N)
+        replicate_priors = [priors[i]() for _ in range(N)]
+        replicate_lengths = full(N, Y_lengths[i], dtype=int32)
+
+        # fit N models
+        replicate_models = fit_models(
+            replicate_X,
+            replicate_Y,
+            replicate_lengths,
+            model,
+            replicate_priors,
+        )
+        processes.append(replicate_models)
 
     return processes
 
@@ -221,6 +304,29 @@ def assign_priors(kernel: Kernel, priors: GPPriors):
 # ------------------------ #
 
 
+def pad_zeros(X: Sequence[Ndarray]) -> Ndarray:
+    """
+    Pad zeros to the end of each array in a list of arrays
+
+    Parameters
+    ----------
+    X: List[Ndarray]
+        List of arrays
+
+    Returns
+    -------
+    Ndarray
+        Padded array
+    """
+    max_length = max([len(x) for x in X])
+    result_array = zeros((len(X), max_length))
+
+    for i, x in enumerate(X):
+        result_array[i, : len(x)] = x.reshape(-1)
+
+    return result_array.T
+
+
 def load_data(
     path: str,
 ) -> Tuple[
@@ -275,5 +381,8 @@ def load_data(
     for i in range(N):
         y_curr = y_all[:, i]
         y_length[i] = max(nonzero(y_curr))
+
+    print(time.shape)
+    print(y_all.shape)
 
     return time, bckgd, bckgd_length, M, y_all, y_length, N
