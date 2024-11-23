@@ -1,6 +1,5 @@
 # Standard Library Imports
-from typing import List, Optional, Tuple, Type
-from copy import deepcopy
+from typing import List, Tuple, Type, Union
 
 # Third-Party Library Imports
 import pandas as pd
@@ -9,17 +8,16 @@ import pandas as pd
 from numpy import float64, int32, max, std, zeros, mean, shape, nonzero
 from numpy.typing import NDArray
 
-from gpflow.kernels import Kernel, SquaredExponential
+from gpflow.kernels import Kernel
 from gpflow import Parameter
 from gpflow.utilities import to_default_float
-from gpflow.models import GPR
-import gpflow.optimizers as optimizers
 
 import tensorflow_probability as tfp
 
 # Internal Project Imports
-from pyrocell.types import Ndarray, GPPriors
-from pyrocell.gp.gpflow.backend import GaussianProcess, NoiseModel
+from pyrocell.gp.gpflow.backend.types import Ndarray, GPPriors, GPModel
+from pyrocell.gp.gpflow.backend import GaussianProcess
+from pyrocell.gp.gpflow.models import NoiseModel
 
 
 # -----------------------------------#
@@ -31,11 +29,11 @@ def fit_models(
     X: Ndarray,
     Y: Ndarray,
     Y_lengths: NDArray[int32],
-    model: Type[GaussianProcess],
-    priors: GPPriors,
+    model: Type[GPModel],
+    priors: Union[GPPriors, List[GPPriors]],
     preprocess: int = 0,
     verbose: bool = False,
-) -> List[Optional[GaussianProcess]]:
+) -> List[GaussianProcess]:
     """
     Fit a Gaussian Process model to each trace
 
@@ -61,9 +59,14 @@ def fit_models(
     List[GaussianProcess]]
         List of fitted models
     """
-    models = []
+    processes = []
 
-    for i in range(len(Y_lengths)):
+    if isinstance(priors, list):
+        assert len(priors) == len(Y_lengths)
+    else:
+        priors = [priors] * len(Y_lengths)
+
+    for i, prior in zip(range(len(Y_lengths)), priors):
         X_curr = X[: Y_lengths[i]]
         y_curr = Y[: Y_lengths[i], i, None]
 
@@ -72,21 +75,22 @@ def fit_models(
         elif preprocess == 2:
             y_curr = (y_curr - mean(y_curr)) / std(y_curr)
 
-        m = model(**priors)
+        gp_model = model(prior)
+        m = GaussianProcess(gp_model)
         m.fit(X_curr, y_curr, verbose=verbose)
 
-        models.append(m)
+        processes.append(m)
 
-    return models
+    return processes
 
 
 def detrend(
     X: NDArray[float64],
     Y: NDArray[float64],
     Y_lengths: NDArray[int32],
-    detrend_lengthscale: float,
+    detrend_lengthscale: Union[float, int],
     verbose: bool = False,
-) -> Tuple[List[Optional[NDArray[float64]]], List[Optional[NoiseModel]]]:
+) -> Tuple[List[NDArray[float64]], List[GaussianProcess]]:
     """
     Detrend stochastic process using RBF process
 
@@ -98,75 +102,54 @@ def detrend(
         Input traces
     Y_lengths: NDArray[int32]
         Length of each trace
-    detrend_lengthscale: float
-        Lengthscale of the detrending process
+    detrend_lengthscale: float | int
+        Lengthscale of the detrending process, or integer portion of trace length
     verbose: bool
         Print information
 
     Returns
     -------
-    Tuple[List[NDArray[float64]], List[NoiseModel]]
+    Tuple[List[NDArray[float64]], List[GaussianProcess]]
         Detrended traces, list of fit models
     """
+    if isinstance(detrend_lengthscale, float):
+        priors = {
+            "lengthscale": Parameter(
+                to_default_float(detrend_lengthscale + 0.1),
+                transform=tfp.bijectors.Softplus(
+                    low=to_default_float(detrend_lengthscale)
+                ),
+            )
+        }
+        models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 2, verbose)
+    else:
+        priors = []
+        for i in range(len(Y_lengths)):
+            lengthscale = Y_lengths[i] / detrend_lengthscale
+            priors.append(
+                {
+                    "lengthscale": Parameter(
+                        to_default_float(lengthscale + 0.1),
+                        transform=tfp.bijectors.Softplus(
+                            low=to_default_float(lengthscale)
+                        ),
+                    )
+                }
+            )
 
-    """
-    # create model and set priors
-    detrend_priors = {
-        "lengthscales": Parameter(
-            to_default_float(7.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        ),
-    }
-    m = NoiseModel(detrend_priors)"""
+        models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 2, verbose)
 
-    detrend_list: List[Optional[NDArray[float64]]] = [None] * len(Y_lengths)
-    models: List[Optional[NoiseModel]] = [None] * len(Y_lengths)
+    detrended = []
+    for m in models:
+        y_curr = m.y
+        y_trend = m.mean
 
-    for i in range(len(Y_lengths)):
-        X_curr = X[: Y_lengths[i]]
-        y_curr = Y[: Y_lengths[i], i, None]
-
-        # standardise
-        y_curr = (y_curr - mean(y_curr)) / std(y_curr)
-
-        k_trend = SquaredExponential()
-        gpr = GPR(data=(X_curr, y_curr), kernel=k_trend, mean_function=None)
-
-        gpr.kernel.lengthscales = Parameter(
-            to_default_float(detrend_lengthscale + 0.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(detrend_lengthscale)),
-        )
-
-        opt = optimizers.Scipy()
-        opt_logs = opt.minimize(
-            gpr.training_loss, gpr.trainable_variables, options=dict(maxiter=100)
-        )
-
-        y_trend, var = gpr.predict_f(X_curr)
-
-        m = NoiseModel()
-        m.X = X_curr
-        m.y = y_curr
-        m.mean, m.var = y_trend, var
-
-        """
-        # fit model and extract mean
-        m.fit(X, y)
-        if verbose:
-            print(f"Lengthscale: {m.fit_gp.kernel.lengthscales}")
-
-        trend = m.mean"""
-
-        # detrend and centre
         y_detrended = y_curr - y_trend
         y_detrended = y_detrended - mean(y_detrended)
 
-        m.fit_gp = deepcopy(gpr)
+        detrended.append(y_detrended)
 
-        detrend_list[i] = y_detrended
-        models[i] = m
-
-    return detrend_list, models
+    return detrended, models
 
 
 def background_noise(
@@ -174,7 +157,7 @@ def background_noise(
     Y: Ndarray,
     Y_lengths: NDArray[int32],
     verbose: bool = False,
-) -> Tuple[float64, List[NoiseModel]]:
+) -> Tuple[float64, List[GaussianProcess]]:
     """
     Fit a background noise model to the data and return the standard deviation of the overall noise
 
@@ -191,7 +174,7 @@ def background_noise(
 
     Returns
     -------
-    Tuple[Tensor, list[NoiseModel]]
+    Tuple[Tensor, list[GaussianProcess]]
         Standard deviation of the overall noise, list of noise models
     """
     std_array = zeros(len(Y_lengths), dtype=float64)
@@ -206,10 +189,6 @@ def background_noise(
 
     for i in range(len(Y_lengths)):
         noise_model = models[i]
-
-        if noise_model is None:
-            continue
-
         std_array[i] = noise_model.noise
 
     std = mean(std_array)
@@ -271,8 +250,8 @@ def load_data(
     - N: count of cell regions
     """
     df = pd.read_csv(path).fillna(0)
-    data_cols = [col for col in df if col.startswith("Cell")]
-    bckgd_cols = [col for col in df if col.startswith("Background")]
+    data_cols = [col for col in df if col.startswith("Cell")]  # type: ignore
+    bckgd_cols = [col for col in df if col.startswith("Background")]  # type: ignore
     time = df["Time (h)"].values[:, None]
 
     bckgd = df[bckgd_cols].values

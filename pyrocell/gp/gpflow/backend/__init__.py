@@ -1,28 +1,20 @@
 # Standard Library Imports
-from typing import Optional, Tuple, override
-from copy import deepcopy
+from typing import Optional, Tuple
 
 # Third-Party Library Imports
-from gpflow import Parameter
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 from tensorflow import Tensor, sqrt, multiply
-
-from gpflow.kernels import Kernel, SquaredExponential, Matern12, Cosine
-from gpflow.utilities import print_summary
-from gpflow.models import GPR
 import gpflow.optimizers as optimizers
-
-import tensorflow_probability as tfp
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
-from pyrocell.types import Ndarray, GPPriors
+from pyrocell.gp.gpflow.backend.types import Ndarray, GPModel
 
-# -------------------------------- #
-# --- Gaussian Process classes --- #
-# -------------------------------- #
+# ------------------------------ #
+# --- Gaussian Process class --- #
+# ------------------------------ #
 
 
 class GaussianProcess(GaussianProcessBase):
@@ -30,12 +22,9 @@ class GaussianProcess(GaussianProcessBase):
     Gaussian Process model using GPflow.
     """
 
-    def __init__(self, *args, **kwargs):
-        if kwargs.get("kernel", None) is None:
-            raise ValueError("Please provide a kernel for the Gaussian Process")
-
-        self.kernel = deepcopy(kwargs["kernel"])
-        """Kernel for the Gaussian Process"""
+    def __init__(self, model: GPModel):
+        self.model = model
+        """Regression with kernel for the Gaussian Process"""
 
     def __call__(
         self,
@@ -87,17 +76,14 @@ class GaussianProcess(GaussianProcessBase):
             Success status
         """
 
-        gp_reg = GPR((X, y), kernel=deepcopy(self.kernel), mean_function=None)
-
-        if verbose:
-            print_summary(gp_reg)
+        gp_reg = self.model(X, y)
 
         self.X, self.y = X, y
         opt = optimizers.Scipy()
 
         opt_logs = opt.minimize(
             gp_reg.training_loss,
-            gp_reg.trainable_variables,
+            gp_reg.trainable_variables,  # type: ignore
             options=dict(maxiter=100),
         )
 
@@ -105,7 +91,7 @@ class GaussianProcess(GaussianProcessBase):
             print(gp_reg.parameters)
 
         self.mean, self.var = gp_reg.predict_y(X, full_cov=False)
-        self.noise = gp_reg.likelihood.variance**0.5
+        self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
         self.fit_gp = gp_reg
 
     def log_likelihood(
@@ -165,69 +151,3 @@ class GaussianProcess(GaussianProcessBase):
         if plot_sd:
             plt.plot(X, mean + std, zorder=0, c="r")
             plt.plot(X, mean - std, zorder=0, c="r")
-
-
-# -----------------------------------------#
-# --- Gaussian Process Implementations --- #
-# -----------------------------------------#
-
-
-class OU(GaussianProcess):
-    """
-    Ornstein-Uhlenbeck process class
-    """
-
-    @override
-    def __init__(self, priors: GPPriors):
-        matern = Matern12()
-
-        super().__init__(kernel=matern)
-
-
-class OUosc(GaussianProcess):
-    """
-    Ornstein-Uhlenbeck process with an oscillator (cosine) kernel
-    """
-
-    @override
-    def __init__(self, ou_priors: GPPriors, osc_priors: GPPriors):
-        matern = Matern12()
-        osc = Cosine()
-
-        super().__init__(kernel=matern + osc)
-
-
-class NoiseModel(GaussianProcess):
-    """
-    Noise model class
-    """
-
-    @override
-    def __init__(self, lengthscale: Optional[Parameter] = None):
-        kernel = SquaredExponential()
-
-        if lengthscale is not None:
-            kernel.lengthscales.assign(lengthscale)
-
-        super().__init__(kernel=kernel)
-
-
-# -------------------------------- #
-# --- Gaussian Process helpers --- #
-# -------------------------------- #
-
-
-def assign_priors(kernel: Kernel, priors: GPPriors):
-    """
-    Assign priors to kernel hyperparameters
-
-    Parameters
-    ----------
-    kernel: Kernel
-        Kernel to assign priors to
-    priors: GPPriors
-        Priors for the kernel hyperparameters
-    """
-    for key, prior in priors.items():
-        attribute = getattr(kernel, key)
-        attribute.assign(prior)

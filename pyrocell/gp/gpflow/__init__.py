@@ -111,7 +111,7 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         self.y_detrend, self.model_detrend = detrend(
-            self.time, self.y_all, self.y_length, 7.0, verbose=verbose
+            self.time, self.y_all, self.y_length, 3, verbose=verbose
         )
 
         if "detrend" in plots:
