@@ -213,6 +213,7 @@ def detrend(
         Detrended traces, list of fit models
     """
     # Set priors
+    """"""
     match detrend_lengthscale:
         case int():
             priors = [
@@ -244,7 +245,7 @@ def detrend(
             )
 
     # Fit RBF models, with mean centred
-    GPs = fit_models(X, Y, NoiseModel, priors, preprocess=1, verbose=verbose)
+    GPs = fit_models(X, Y, NoiseModel, priors, preprocess=2, verbose=verbose)
 
     # Detrend traces
     detrended = []
@@ -296,7 +297,7 @@ def background_noise(
     models = fit_models(X, Y, NoiseModel, priors, preprocess=1, verbose=verbose)
 
     for noise_model in models:
-        std_array.append(noise_model.noise)
+        std_array.append(noise_model.fit_gp.likelihood.variance**0.5)
 
     std = mean(std_array)
 
@@ -334,7 +335,7 @@ def load_data(
     Y_data_filtered = []
 
     for y in Y_data:
-        y_length = max(nonzero(y)) + 1
+        y_length = max(nonzero(y))
         X_data.append(X[:y_length].reshape(-1, 1))
         Y_data_filtered.append(y[:y_length].reshape(-1, 1))
 
