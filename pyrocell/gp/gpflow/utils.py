@@ -76,8 +76,8 @@ def OU_OUosc(X, Y, noise, K):
 
 
 def fit_models(
-    X: List[Ndarray],
-    Y: List[Ndarray],
+    X: Sequence[Ndarray],
+    Y: Sequence[Ndarray],
     model: Type[GPModel],
     priors: Union[Callable[..., GPPriors], Sequence[GPPriors]],
     preprocess: int = 0,
@@ -244,12 +244,17 @@ def detrend(
                 f"Invalid type for detrend_lengthscale: {type(detrend_lengthscale)}"
             )
 
-    # Fit RBF models, with mean centred
-    GPs = fit_models(X, Y, NoiseModel, priors, preprocess=2, verbose=verbose)
+    # Standardise traces
+    Y_standardised = [(y - mean(y)) / std(y) for y in Y]
+
+    # Fit RBF models
+    GPs = fit_models(
+        X, Y_standardised, NoiseModel, priors, preprocess=0, verbose=verbose
+    )
 
     # Detrend traces
     detrended = []
-    for y, m in zip(Y, GPs):
+    for y, m in zip(Y_standardised, GPs):
         y_trend = m.mean
         y_detrended = y - y_trend
         y_detrended = y_detrended - mean(y_detrended)
