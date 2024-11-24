@@ -1,12 +1,10 @@
 # Standard Library Imports
-from typing import Optional
 
 # Third-Party Library Imports
-from gpflow import Parameter
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import array, ceil, sqrt, std
+from numpy import ceil, log, sqrt, std, max
 from numpy.random import uniform
 
 # Internal Project Imports
@@ -15,62 +13,44 @@ from pyrocell.gp.gpflow.utils import (
     background_noise,
     detrend,
     load_data,
-    fit_models,
     fit_models_replicates,
-    pad_zeros,
 )
 
 
 class OscillatorDetector:
-    def __init__(self, path: Optional[str] = None):
+    def __init__(
+        self,
+        path: str,
+        X_name: str,
+        background_name: str,
+        Y_name: str,
+    ):
         """
         Initialize the Oscillator Detector
         If a path is provided, load data from the csv file
 
         Parameters
         ----------
-        backend : str
-            Backend library for the Gaussian Process models
-        path : str | None
+        path : str
             Path to the csv file
+        X_name : str
+            Name of the column containing the time points
+        background_name : str
+            Name of the column containing the background noise models
+        Y_name : str
+            Name of the column containing the cell traces
         """
+        # load data
+        self.X_bckgd, self.bckgd = load_data(path, X_name, background_name)
+        self.X, self.Y = load_data(path, X_name, Y_name)
+        self.N, self.M = len(self.Y), len(self.bckgd)
 
-        if path is not None:
-            (
-                self.X,
-                self.bckgd,
-                self.bckgd_length,
-                self.M,
-                self.y_all,
-                self.y_length,
-                self.N,
-            ) = load_data(path)
         self.allowed = set(["background", "detrend"])
 
     def __str__(self):
         # create a summary of the models and data
         out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
         return out
-
-    def load_data(self, path: str):
-        """
-        Load data from a csv file
-
-
-        Parameters
-        ----------
-        path : str
-            Path to the csv file
-        """
-        (
-            self.X,
-            self.bckgd,
-            self.bckgd_length,
-            self.M,
-            self.y_all,
-            self.y_length,
-            self.N,
-        ) = load_data(path)
 
     def run(self, *args, **kwargs):
         """
@@ -104,12 +84,9 @@ class OscillatorDetector:
 
         # --- background noise --- #
         self.bckgd_std, self.bckgd_models = background_noise(
-            self.X, self.bckgd, self.bckgd_length, verbose=verbose
+            self.X_bckgd, self.bckgd, 7.0, verbose=verbose
         )
-        self.noise_list = [
-            self.bckgd_std / std(self.y_all[: self.y_length[i], i, None])
-            for i in range(self.N)
-        ]
+        self.noise_list = [self.bckgd_std / std(self.Y[i]) for i in range(self.N)]
 
         # plot
         if "background" in plots:
@@ -120,7 +97,7 @@ class OscillatorDetector:
             print("\nDetrending and denoising cell data...")
 
         self.y_detrend, self.model_detrend = detrend(
-            self.X, self.y_all, self.y_length, 7.0, verbose=verbose
+            self.X, self.Y, 7.0, verbose=verbose
         )
 
         if "detrend" in plots:
@@ -134,9 +111,9 @@ class OscillatorDetector:
         for i in range(self.N):
             OU_priors.append(
                 lambda: {
-                    "lengthscale": Parameter(uniform(0.1, 2.0)),
-                    "variance": Parameter(uniform(0.1, 2.0)),
-                    "likelihood_variance": Parameter(self.noise_list[i] ** 2),
+                    "lengthscale": uniform(0.1, 2.0),
+                    "variance": uniform(0.1, 2.0),
+                    "likelihood_variance": self.noise_list[i] ** 2,
                     "train_likelihood": False,
                 }
             )
@@ -145,6 +122,7 @@ class OscillatorDetector:
                     "lengthscale": uniform(0.1, 2.0),
                     "variance": uniform(0.1, 2.0),
                     "lengthscale_cos": uniform(0.1, 4.0),
+                    "likelihood_variance": self.noise_list[i] ** 2,
                     "train_likelihood": False,
                     "train_osc_variance": False,
                 }
@@ -155,13 +133,45 @@ class OscillatorDetector:
         self.ou_models = fit_models_replicates(
             K,
             self.X,
-            pad_zeros(self.y_detrend),
-            self.y_length,
+            self.y_detrend,
             OU,
             OU_priors,
             2,
             verbose,
         )
+        self.ouosc_models = fit_models_replicates(
+            K,
+            self.X,
+            self.y_detrend,
+            OUosc,
+            OUosc_priors,
+            2,
+            verbose,
+        )
+
+        # extract posterior log likelihoods
+        self.ou_likelihoods = [
+            [m.log_likelihood() for m in models] for models in self.ou_models
+        ]
+        self.ouosc_likelihoods = [
+            [m.log_likelihood() for m in models] for models in self.ouosc_models
+        ]
+        self.LLRs = [
+            200 * (max(ouosc) - max(ou))
+            for ouosc, ou in zip(self.ouosc_likelihoods, self.ou_likelihoods)
+        ]
+
+        self.ou_BICs = [
+            -2 * max(ou) + 2 * log(len(self.y_detrend[i]))
+            for i, ou in enumerate(self.ou_likelihoods)
+        ]
+        self.ouosc_BICs = [
+            -2 * max(ouosc) + 3 * log(len(self.y_detrend[i]))
+            for i, ouosc in enumerate(self.ouosc_likelihoods)
+        ]
+        self.BIC_diffs = [
+            ou - ouosc for ouosc, ou in zip(self.ouosc_BICs, self.ou_BICs)
+        ]
 
     def plot(self, target: str):
         """
@@ -202,7 +212,7 @@ class OscillatorDetector:
                 plt.subplot(dim, dim, i + 1)
                 m.test_plot()  # detrended data
                 plt.plot(
-                    self.X[: self.y_length[i]],
+                    self.X[i],
                     y_detrended,
                     label="Detrended",
                     color="orange",

@@ -5,10 +5,8 @@ from typing import Callable, List, Sequence, Tuple, Type, Union
 import pandas as pd
 
 # Direct Namespace Imports
-from numpy import float64, int32, max, std, zeros, mean, shape, nonzero, full
-from numpy.typing import NDArray
+from numpy import float64, nonzero, std, mean, max
 
-from gpflow.kernels import Kernel
 from gpflow import Parameter
 from gpflow.utilities import to_default_float
 
@@ -19,18 +17,69 @@ from pyrocell.gp.gpflow.backend.types import Ndarray, GPPriors, GPModel
 from pyrocell.gp.gpflow.backend import GaussianProcess
 from pyrocell.gp.gpflow.models import NoiseModel
 
-
 # -----------------------------------#
 # --- Pyrocell utility functions --- #
 # -----------------------------------#
 
+import gpflow
+import numpy as np
+
+
+def OU_OUosc(X, Y, noise, K):
+    OU_LL_list, OUosc_LL_list = [[] for _ in range(2)]
+
+    for k in range(K):
+        k_ou = gpflow.kernels.Matern12()
+
+        m = gpflow.models.GPR(data=(X, Y), kernel=k_ou, mean_function=None)
+        m.kernel.variance.assign(np.random.uniform(0.1, 2.0))
+        m.kernel.lengthscales.assign(np.random.uniform(0.1, 2.0))
+        m.likelihood.variance.assign(noise**2)
+        gpflow.set_trainable(m.likelihood.variance, False)
+
+        opt = gpflow.optimizers.Scipy()
+        opt_logs = opt.minimize(
+            m.training_loss, m.trainable_variables, options=dict(maxiter=100)
+        )
+
+        nlmlOU = m.log_posterior_density()
+
+        OU_LL = nlmlOU
+        OU_LL_list.append(OU_LL)
+
+        k_ou_osc = gpflow.kernels.Matern12() * gpflow.kernels.Cosine()
+
+        m = gpflow.models.GPR(data=(X, Y), kernel=k_ou_osc, mean_function=None)
+        m.likelihood.variance.assign(noise**2)
+        gpflow.set_trainable(m.likelihood.variance, False)
+        gpflow.set_trainable(m.kernel.kernels[1].variance, False)
+        m.kernel.kernels[0].variance.assign(np.random.uniform(0.1, 2.0))
+        m.kernel.kernels[0].lengthscales.assign(np.random.uniform(0.1, 2.0))
+        m.kernel.kernels[1].lengthscales.assign(np.random.uniform(0.1, 4.0))
+
+        # print_summary(m)
+        opt = gpflow.optimizers.Scipy()
+        opt_logs = opt.minimize(
+            m.training_loss, m.trainable_variables, options=dict(maxiter=100)
+        )
+
+        nlmlOSC = m.log_posterior_density()  # opt_logs.fun
+
+        OU_osc_LL = nlmlOSC
+        OUosc_LL_list.append(OU_osc_LL)
+
+    BIC_OUosc = -2 * np.max(OUosc_LL_list) + 3 * np.log(len(Y))
+    BIC_OU = -2 * np.max(OU_LL_list) + 2 * np.log(len(Y))
+    BICdiff = BIC_OU - BIC_OUosc
+
+    return BICdiff, BIC_OU, BIC_OUosc
+
 
 def fit_models(
-    X: Ndarray,
-    Y: Ndarray,
-    Y_lengths: NDArray[int32],
+    X: List[Ndarray],
+    Y: List[Ndarray],
     model: Type[GPModel],
-    priors: Union[GPPriors, List[GPPriors]],
+    priors: Union[Callable[..., GPPriors], Sequence[GPPriors]],
     preprocess: int = 0,
     verbose: bool = False,
 ) -> List[GaussianProcess]:
@@ -39,16 +88,14 @@ def fit_models(
 
     Parameters
     ----------
-    X: Ndarray
-        Input domain
-    Y: Ndarray
-        Input traces
-    Y_lengths: Ndarray
-        Length of each trace
+    X: List[Ndarray]
+        List of input domains
+    Y: List[Ndarray]
+        List of input traces
     model: GPModel
         Model to fit
-    priors: GPPriors | List[GPPriors]
-        Priors for the kernel hyperparameters, or list of priors for each trace
+    priors: Callable[..., GPPriors] | List[GPPriors]
+        Function that generates priors for each trace, or list of priors
     preprocess: int
         Preprocessing option (0: None, 1: Centre, 2: Standardise)
     verbose: bool
@@ -56,20 +103,17 @@ def fit_models(
 
     Returns
     -------
-    List[GaussianProcess]]
+    List[GaussianProcess]
         List of fitted models
     """
-    if isinstance(priors, list):
-        assert len(priors) == len(Y_lengths)
-    else:
-        priors = [priors] * len(Y_lengths)
+    if callable(priors):
+        prior_list = [priors() for _ in Y]
+    elif hasattr(priors, "__iter__"):
+        prior_list = priors
 
     processes = []
 
-    for i, prior in zip(range(len(Y_lengths)), priors):
-        X_curr = X[: Y_lengths[i]]
-        y_curr = Y[: Y_lengths[i], i, None]
-
+    for x_curr, y_curr, prior in zip(X, Y, prior_list):
         if preprocess == 1:
             y_curr = y_curr - mean(y_curr)
         elif preprocess == 2:
@@ -77,7 +121,7 @@ def fit_models(
 
         gp_model = model(prior)
         m = GaussianProcess(gp_model)
-        m.fit(X_curr, y_curr, verbose=verbose)
+        m.fit(x_curr, y_curr, verbose=verbose)
 
         processes.append(m)
 
@@ -86,9 +130,8 @@ def fit_models(
 
 def fit_models_replicates(
     N: int,
-    X: Ndarray,
-    Y: Ndarray,
-    Y_lengths: NDArray[int32],
+    X: List[Ndarray],
+    Y: List[Ndarray],
     model: Type[GPModel],
     prior_gen: Union[Callable[..., GPPriors], List[Callable[..., GPPriors]]],
     preprocess: int = 0,
@@ -101,15 +144,13 @@ def fit_models_replicates(
     ----------
     N: int
         Number of replicates
-    X: Ndarray
-        Input domain
-    Y: Ndarray
-        Input traces
-    Y_lengths: Ndarray
-        Length of each trace
+    X: List[Ndarray]
+        List of input domains
+    Y: List[Ndarray]
+        List of input traces
     model: GPModel
         Model to fit
-    priors: Callable[..., GPPriors] | List[Callable[..., GPPriors]]
+    prior_gen: Callable[..., GPPriors] | List[Callable[..., GPPriors]]
         Function that generates priors for each replicate, or list of functions for each trace
     preprocess: int
         Preprocessing option (0: None, 1: Centre, 2: Standardise)
@@ -119,72 +160,48 @@ def fit_models_replicates(
     Returns
     -------
     List[List[GaussianProcess]]
-        List of N fitted models for each trace
+        List of N fitted processes for each trace
     """
     if isinstance(prior_gen, list):
-        assert len(prior_gen) == len(Y_lengths)
+        assert len(prior_gen) == len(Y)
         priors = prior_gen
     else:
-        priors = [prior_gen] * len(Y_lengths)
+        priors = [prior_gen] * len(Y)
 
     # preprocess data
-    if preprocess == 1 or preprocess == 2:
-        Y = Y.copy()
+    match preprocess:
+        case 0:
+            Y_processed = Y
+        case 1:
+            Y_processed = [y - mean(y) for y in Y]
+        case 2:
+            Y_processed = [(y - mean(y)) / std(y) for y in Y]
+        case _:
+            raise ValueError("Invalid preprocess option")
 
-    for i in range(N):
-        if preprocess == 1:
-            Y[: Y_lengths[i], i, None] = Y[: Y_lengths[i], i, None] - mean(
-                Y[: Y_lengths[i], i, None]
-            )
-        elif preprocess == 2:
-            Y[: Y_lengths[i], i, None] = (
-                Y[: Y_lengths[i], i, None] - mean(Y[: Y_lengths[i], i, None])
-            ) / std(Y[: Y_lengths[i], i, None])
+    GPs: List[List[GaussianProcess]] = []
+    for i, (x, y) in enumerate(zip(X, Y_processed)):
+        x_list, y_list = [x] * N, [y] * N
+        GPs.append(fit_models(x_list, y_list, model, priors[i], 0, verbose))
 
-    # fit models
-    processes = []
-    for i in range(len(Y_lengths)):
-        # select trace
-        X_curr = X[: Y_lengths[i]]
-        y_curr = Y[: Y_lengths[i], i, None]
-
-        # replicate data
-        replicate_X = pad_zeros([X_curr] * N)
-        replicate_Y = pad_zeros([y_curr] * N)
-        replicate_priors = [priors[i]() for _ in range(N)]
-        replicate_lengths = full(N, Y_lengths[i], dtype=int32)
-
-        # fit N models
-        replicate_models = fit_models(
-            replicate_X,
-            replicate_Y,
-            replicate_lengths,
-            model,
-            replicate_priors,
-        )
-        processes.append(replicate_models)
-
-    return processes
+    return GPs
 
 
 def detrend(
-    X: NDArray[float64],
-    Y: NDArray[float64],
-    Y_lengths: NDArray[int32],
+    X: List[Ndarray],
+    Y: List[Ndarray],
     detrend_lengthscale: Union[float, int],
     verbose: bool = False,
-) -> Tuple[List[NDArray[float64]], List[GaussianProcess]]:
+) -> Tuple[List[Ndarray], List[GaussianProcess]]:
     """
     Detrend stochastic process using RBF process
 
     Parameters
     ----------
-    X: NDArray[float64]
-        Input domain
-    Y: NDArray[float64]
-        Input traces
-    Y_lengths: NDArray[int32]
-        Length of each trace
+    X: List[Ndarray]
+        List of input domains
+    Y: List[Ndarray]
+        List of input traces
     detrend_lengthscale: float | int
         Lengthscale of the detrending process, or integer portion of trace length
     verbose: bool
@@ -192,53 +209,58 @@ def detrend(
 
     Returns
     -------
-    Tuple[List[NDArray[float64]], List[GaussianProcess]]
+    Tuple[List[Ndarray], List[GaussianProcess]]
         Detrended traces, list of fit models
     """
-    if isinstance(detrend_lengthscale, float):
-        priors = {
-            "lengthscale": Parameter(
-                to_default_float(detrend_lengthscale + 0.1),
-                transform=tfp.bijectors.Softplus(
-                    low=to_default_float(detrend_lengthscale)
-                ),
-            )
-        }
-        models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 2, verbose)
-    else:
-        priors = []
-        for i in range(len(Y_lengths)):
-            lengthscale = Y_lengths[i] / detrend_lengthscale
-            priors.append(
+    # Set priors
+    match detrend_lengthscale:
+        case int():
+            priors = [
                 {
                     "lengthscale": Parameter(
-                        to_default_float(lengthscale + 0.1),
+                        to_default_float(len(y) / detrend_lengthscale + 0.1),
                         transform=tfp.bijectors.Softplus(
-                            low=to_default_float(lengthscale)
+                            low=to_default_float(len(y) / detrend_lengthscale)
                         ),
                     )
                 }
+                for y in Y
+            ]
+        case float():
+            priors = [
+                {
+                    "lengthscale": Parameter(
+                        to_default_float(detrend_lengthscale + 0.1),
+                        transform=tfp.bijectors.Softplus(
+                            low=to_default_float(detrend_lengthscale)
+                        ),
+                    )
+                }
+                for _ in Y
+            ]
+        case _:
+            raise TypeError(
+                f"Invalid type for detrend_lengthscale: {type(detrend_lengthscale)}"
             )
 
-        models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 2, verbose)
+    # Fit RBF models, with mean centred
+    GPs = fit_models(X, Y, NoiseModel, priors, preprocess=1, verbose=verbose)
 
+    # Detrend traces
     detrended = []
-    for m in models:
-        y_curr = m.y
+    for y, m in zip(Y, GPs):
         y_trend = m.mean
-
-        y_detrended = y_curr - y_trend
+        y_detrended = y - y_trend
         y_detrended = y_detrended - mean(y_detrended)
-
         detrended.append(y_detrended)
 
-    return detrended, models
+    return detrended, GPs
 
 
 def background_noise(
-    X: Ndarray,
-    Y: Ndarray,
-    Y_lengths: NDArray[int32],
+    X: List[Ndarray],
+    Y: List[Ndarray],
+    lengthscale: float,
     verbose: bool = False,
 ) -> Tuple[float64, List[GaussianProcess]]:
     """
@@ -246,33 +268,35 @@ def background_noise(
 
     Parameters
     ----------
-    X: Ndarray
-        Input domain
-    Y: Ndarray
-        Input traces
-    Y_lengths: NDArray[int32]
-        Length of each trace
+    X: List[Ndarray]
+        List of input domains
+    Y: List[Ndarray]
+        List of input traces
+    lengthscale: float
+        Lengthscale of the noise model
     verbose: bool
         Print information
 
     Returns
     -------
-    Tuple[Tensor, list[GaussianProcess]]
+    Tuple[float64, List[GaussianProcess]]
         Standard deviation of the overall noise, list of noise models
     """
-    std_array = zeros(len(Y_lengths), dtype=float64)
+    std_array = []
 
-    priors = {
-        "lengthscale": Parameter(
-            to_default_float(7.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
-        ),
-    }
-    models = fit_models(X, Y, Y_lengths, NoiseModel, priors, 1, verbose)
+    priors = [
+        {
+            "lengthscale": Parameter(
+                to_default_float(lengthscale + 0.1),
+                transform=tfp.bijectors.Softplus(low=to_default_float(lengthscale)),
+            ),
+        }
+        for _ in Y
+    ]
+    models = fit_models(X, Y, NoiseModel, priors, preprocess=1, verbose=verbose)
 
-    for i in range(len(Y_lengths)):
-        noise_model = models[i]
-        std_array[i] = noise_model.noise
+    for noise_model in models:
+        std_array.append(noise_model.noise)
 
     std = mean(std_array)
 
@@ -283,106 +307,35 @@ def background_noise(
     return std, models
 
 
-def assign_priors(kernel: Kernel, priors: GPPriors):
-    """
-    Assign priors to kernel hyperparameters
-
-    Parameters
-    ----------
-    kernel: Kernel
-        Kernel to assign priors to
-    priors: GPPriors
-        Priors for the kernel hyperparameters
-    """
-    for key, prior in priors.items():
-        attribute = getattr(kernel, key)
-        attribute.assign(prior)
-
-
-# ------------------------ #
-# --- GPflow Utilities --- #
-# ------------------------ #
-
-
-def pad_zeros(X: Sequence[Ndarray]) -> Ndarray:
-    """
-    Pad zeros to the end of each array in a list of arrays
-
-    Parameters
-    ----------
-    X: List[Ndarray]
-        List of arrays
-
-    Returns
-    -------
-    Ndarray
-        Padded array
-    """
-    max_length = max([len(x) for x in X])
-    result_array = zeros((len(X), max_length))
-
-    for i, x in enumerate(X):
-        result_array[i, : len(x)] = x.reshape(-1)
-
-    return result_array.T
-
-
 def load_data(
-    path: str,
+    path: str, X_name: str, Y_name: str
 ) -> Tuple[
-    NDArray[float64],
-    NDArray[float64],
-    NDArray[int32],
-    int,
-    NDArray[float64],
-    NDArray[int32],
-    int,
+    List[Ndarray],
+    List[Ndarray],
 ]:
     """
-    Loads experiment data from a csv file. This file must have:
-    - Time (h) column
-    - Cell columns, name starting with 'Cell'
-    - Background columns, name starting with 'Background'
+    Loads experiment data from a csv file. Taking domain name and trace prefix as input.
 
     :param str path: Path to the csv file.
+    :param str X_name: Name of the domain column.
+    :param str Y_name: Name of the trace column.
 
-    :return Tuple[NDArray[float64], NDArray[float64], NDArray[int32], int, NDArray[float64], NDArray[int32], int]: Split, formatted experimental data
-    - time: time in hours
-    - bckgd: background time-series data
-    - bckgd_length: length of each background trace
-    - M: count of background regions
-    - y_all: cell time-series data
-    - y_length: length of each cell trace
-    - N: count of cell regions
+    :return: Tuple of domain and trace data.
     """
     df = pd.read_csv(path).fillna(0)
-    data_cols = [col for col in df if col.startswith("Cell")]  # type: ignore
-    bckgd_cols = [col for col in df if col.startswith("Background")]  # type: ignore
-    time = df["Time (h)"].values[:, None]
 
-    bckgd = df[bckgd_cols].values
-    M = shape(bckgd)[1]
+    # Extract domain and trace data
+    Y_cols = [col for col in df if col.startswith(Y_name)]
+    Y_data = [df[col].to_numpy() for col in Y_cols]
+    X = df[X_name].to_numpy()
 
-    bckgd_length = zeros(M, dtype=int32)
+    # Filter out zero traces and adjust domains
+    X_data = []
+    Y_data_filtered = []
 
-    for i in range(M):
-        bckgd_curr = bckgd[:, i]
-        bckgd_length[i] = max(nonzero(bckgd_curr))
+    for y in Y_data:
+        y_length = max(nonzero(y)) + 1
+        X_data.append(X[:y_length].reshape(-1, 1))
+        Y_data_filtered.append(y[:y_length].reshape(-1, 1))
 
-    y_all = df[data_cols].values
-
-    N = shape(y_all)[1]
-
-    y_all = df[data_cols].values
-    max(nonzero(y_all))
-
-    y_length = zeros(N, dtype=int32)
-
-    for i in range(N):
-        y_curr = y_all[:, i]
-        y_length[i] = max(nonzero(y_curr))
-
-    print(time.shape)
-    print(y_all.shape)
-
-    return time, bckgd, bckgd_length, M, y_all, y_length, N
+    return X_data, Y_data_filtered

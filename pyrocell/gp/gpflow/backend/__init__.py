@@ -5,8 +5,10 @@ from typing import Optional, Tuple
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from tensorflow import Tensor, sqrt, multiply
+from numpy import float64, array, sqrt
+from tensorflow import Tensor, convert_to_tensor, broadcast_to
 import gpflow.optimizers as optimizers
+from gpflow.kernels import Matern12
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
@@ -30,7 +32,7 @@ class GaussianProcess(GaussianProcessBase):
         self,
         X: Ndarray,
         full_cov: bool = False,
-    ) -> Tuple[Tensor, Tensor]:
+    ) -> Tuple[Ndarray, Ndarray]:
         """
         Evaluate the Gaussian Process on the input domain
 
@@ -50,7 +52,8 @@ class GaussianProcess(GaussianProcessBase):
         if not hasattr(self, "fit_gp"):
             raise ValueError("Model has not been fit yet.")
 
-        return self.fit_gp.predict_y(X, full_cov=full_cov)
+        fit_mean, fit_var = self.fit_gp.predict_y(X, full_cov=full_cov)
+        return fit_mean.numpy(), fit_var.numpy()
 
     def fit(
         self,
@@ -76,29 +79,27 @@ class GaussianProcess(GaussianProcessBase):
             Success status
         """
 
-        try:
-            gp_reg = self.model(X, y)
+        gp_reg = self.model(X, y)
 
-            self.X, self.y = X, y
-            opt = optimizers.Scipy()
+        self.X, self.y = X, y
+        opt = optimizers.Scipy()
 
-            opt_logs = opt.minimize(
-                gp_reg.training_loss,
-                gp_reg.trainable_variables,  # type: ignore
-                options=dict(maxiter=100),
-            )
+        opt_logs = opt.minimize(
+            gp_reg.training_loss,
+            gp_reg.trainable_variables,  # type: ignore
+            options=dict(maxiter=100),
+        )
 
-            # if verbose:
-            # print(gp_reg.parameters)
+        if verbose:
+            # print("Trained GP model:")
+            print(gp_reg.parameters)
 
-            res = gp_reg.predict_y(X, full_cov=False)
-            self.mean = res[0].numpy()
-            self.var = res[1].numpy()
+        res = gp_reg.predict_y(X, full_cov=False)
+        self.mean = res[0].numpy()
+        self.var = res[1].numpy()
 
-            self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
-            self.fit_gp = gp_reg
-        except:
-            print("Error in fitting the model")
+        self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
+        self.fit_gp = gp_reg
 
     def log_likelihood(
         self,
@@ -118,8 +119,7 @@ class GaussianProcess(GaussianProcessBase):
         Tensor
             Log-likelihood
         """
-
-        raise NotImplementedError
+        return self.fit_gp.log_posterior_density().numpy()
 
     def test_plot(
         self,
@@ -148,7 +148,7 @@ class GaussianProcess(GaussianProcessBase):
         else:
             X, y = X_y
             mean, var = self(X, full_cov=False)
-        std = multiply(sqrt(var), 2.0)
+        std = sqrt(var) * 2
 
         # plot
         plt.plot(X, mean, zorder=1, c="k", label="Fit GP")
@@ -157,3 +157,23 @@ class GaussianProcess(GaussianProcessBase):
         if plot_sd:
             plt.plot(X, mean + std, zorder=0, c="r")
             plt.plot(X, mean - std, zorder=0, c="r")
+
+
+# --- Kernel Subclasses --- #
+
+
+class SafeMatern12(Matern12):
+    """
+    Safe Matern 1/2 kernel (adds jitter to prevent numerical instability)
+    """
+
+    def __init__(self):
+        self.jitter = convert_to_tensor(array([1e-3], dtype=float64))
+        super().__init__()
+
+    def scaled_squared_euclid_dist(
+        self, X: Tensor, X2: Optional[Tensor] = None
+    ) -> Tensor:
+        dist = super().scaled_squared_euclid_dist(X, X2)
+
+        return dist + broadcast_to(self.jitter, dist.shape)
