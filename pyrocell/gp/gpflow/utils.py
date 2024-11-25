@@ -128,15 +128,15 @@ def fit_models_replicates(
 
     GPs: List[List[GaussianProcess]] = []
     for i, (x, y) in enumerate(zip(X, Y_processed)):
-        x_list, y_list = [x] * N, [y] * N
+        x_list, y_list = [x for _ in range(N)], [y for _ in range(N)]
         GPs.append(fit_models(x_list, y_list, model, priors[i], 0, verbose))
 
     return GPs
 
 
 def detrend(
-    X: List[Ndarray],
-    Y: List[Ndarray],
+    X: Sequence[Ndarray],
+    Y: Sequence[Ndarray],
     detrend_lengthscale: Union[float, int],
     verbose: bool = False,
 ) -> Tuple[List[Ndarray], List[GaussianProcess]]:
