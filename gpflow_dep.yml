@@ -1,0 +1,14 @@
+name: gpcell
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - numpy
+  - matplotlib
+  - pandas
+  - pdoc
+  - ipykernel
+  - tensorflow
+  - tensorflow-probability
+  - gpflow
+  - tf-keras
