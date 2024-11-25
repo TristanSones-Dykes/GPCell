@@ -21,59 +21,6 @@ from pyrocell.gp.gpflow.models import NoiseModel
 # --- Pyrocell utility functions --- #
 # -----------------------------------#
 
-import gpflow
-import numpy as np
-
-
-def OU_OUosc(X, Y, noise, K):
-    OU_LL_list, OUosc_LL_list = [[] for _ in range(2)]
-
-    for k in range(K):
-        k_ou = gpflow.kernels.Matern12()
-
-        m = gpflow.models.GPR(data=(X, Y), kernel=k_ou, mean_function=None)
-        m.kernel.variance.assign(np.random.uniform(0.1, 2.0))
-        m.kernel.lengthscales.assign(np.random.uniform(0.1, 2.0))
-        m.likelihood.variance.assign(noise**2)
-        gpflow.set_trainable(m.likelihood.variance, False)
-
-        opt = gpflow.optimizers.Scipy()
-        opt_logs = opt.minimize(
-            m.training_loss, m.trainable_variables, options=dict(maxiter=100)
-        )
-
-        nlmlOU = m.log_posterior_density()
-
-        OU_LL = nlmlOU
-        OU_LL_list.append(OU_LL)
-
-        k_ou_osc = gpflow.kernels.Matern12() * gpflow.kernels.Cosine()
-
-        m = gpflow.models.GPR(data=(X, Y), kernel=k_ou_osc, mean_function=None)
-        m.likelihood.variance.assign(noise**2)
-        gpflow.set_trainable(m.likelihood.variance, False)
-        gpflow.set_trainable(m.kernel.kernels[1].variance, False)
-        m.kernel.kernels[0].variance.assign(np.random.uniform(0.1, 2.0))
-        m.kernel.kernels[0].lengthscales.assign(np.random.uniform(0.1, 2.0))
-        m.kernel.kernels[1].lengthscales.assign(np.random.uniform(0.1, 4.0))
-
-        # print_summary(m)
-        opt = gpflow.optimizers.Scipy()
-        opt_logs = opt.minimize(
-            m.training_loss, m.trainable_variables, options=dict(maxiter=100)
-        )
-
-        nlmlOSC = m.log_posterior_density()  # opt_logs.fun
-
-        OU_osc_LL = nlmlOSC
-        OUosc_LL_list.append(OU_osc_LL)
-
-    BIC_OUosc = -2 * np.max(OUosc_LL_list) + 3 * np.log(len(Y))
-    BIC_OU = -2 * np.max(OU_LL_list) + 2 * np.log(len(Y))
-    BICdiff = BIC_OU - BIC_OUosc
-
-    return BICdiff, BIC_OU, BIC_OUosc
-
 
 def fit_models(
     X: Sequence[Ndarray],
@@ -302,7 +249,7 @@ def background_noise(
     models = fit_models(X, Y, NoiseModel, priors, preprocess=1, verbose=verbose)
 
     for noise_model in models:
-        std_array.append(noise_model.fit_gp.likelihood.variance**0.5)
+        std_array.append(noise_model.fit_gp.likelihood.variance**0.5)  # type: ignore
 
     std = mean(std_array)
 
@@ -331,7 +278,7 @@ def load_data(
     df = pd.read_csv(path).fillna(0)
 
     # Extract domain and trace data
-    Y_cols = [col for col in df if col.startswith(Y_name)]
+    Y_cols = [col for col in df if col.startswith(Y_name)]  # type: ignore
     Y_data = [df[col].to_numpy() for col in Y_cols]
     X = df[X_name].to_numpy()
 

@@ -81,10 +81,10 @@ class GaussianProcess(GaussianProcessBase):
 
         gp_reg = self.model(X, y)
 
-        self.X, self.y = X, y
+        self.X, self.y = X.copy(), y.copy()
         opt = optimizers.Scipy()
 
-        opt_logs = opt.minimize(
+        opt.minimize(
             gp_reg.training_loss,
             gp_reg.trainable_variables,  # type: ignore
             options=dict(maxiter=100),
@@ -94,7 +94,9 @@ class GaussianProcess(GaussianProcessBase):
             # print("Trained GP model:")
             print(gp_reg.parameters)
 
-        res = gp_reg.predict_y(X, full_cov=False)
+        self.log_posterior_density = gp_reg.log_posterior_density().numpy()
+
+        res = gp_reg.predict_y(self.X, full_cov=False)
         self.mean = res[0].numpy()
         self.var = res[1].numpy()
 
@@ -119,7 +121,7 @@ class GaussianProcess(GaussianProcessBase):
         Tensor
             Log-likelihood
         """
-        return self.fit_gp.log_posterior_density().numpy()
+        return self.log_posterior_density
 
     def test_plot(
         self,

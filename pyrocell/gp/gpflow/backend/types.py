@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Mapping
+from typing import Mapping, Union
 from abc import ABC, abstractmethod
 
 # Third-Party Library Imports
@@ -11,6 +11,7 @@ from gpflow.models import GPR
 # for defining custom types
 from numpy import float64, int32
 from numpy.typing import NDArray
+from numpy.random import RandomState
 
 
 # ---------------------#
@@ -18,7 +19,7 @@ from numpy.typing import NDArray
 # ---------------------#
 
 Ndarray = NDArray[float64] | NDArray[int32]
-GPPriors = Mapping[str, Parameter]
+GPPriors = Mapping[str, Union[Parameter, RandomState, float, bool]]
 
 
 class GPModel(ABC):
