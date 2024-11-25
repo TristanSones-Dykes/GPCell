@@ -6,11 +6,9 @@
 from gpflow import Parameter, set_trainable
 from gpflow.models import GPR
 from gpflow.kernels import SquaredExponential, Matern12, Cosine
-from gpflow.utilities import print_summary
 
 # Internal Project Imports
 from pyrocell.gp.gpflow.backend.types import GPModel, Ndarray
-from pyrocell.gp.gpflow.backend import SafeMatern12
 
 
 # -----------------------------------------#
@@ -50,7 +48,7 @@ class OUosc(GPModel):
     """
 
     def __call__(self, X: Ndarray, y: Ndarray) -> GPR:
-        kernel = Matern12() + Cosine()
+        kernel = Matern12() * Cosine()
         model = GPR(data=(X, y), kernel=kernel)
 
         # Model Variance
