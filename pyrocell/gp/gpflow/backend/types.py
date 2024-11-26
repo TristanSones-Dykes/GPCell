@@ -1,9 +1,6 @@
 # Standard Library Imports
 from typing import (
-    Any,
     Callable,
-    Dict,
-    List,
     Mapping,
     Optional,
     Sequence,
@@ -14,7 +11,6 @@ from typing import (
 
 # Third-Party Library Imports
 from gpflow import Parameter
-from gpflow.models import GPR
 from gpflow.kernels import Kernel
 
 # Internal Project Imports
@@ -33,7 +29,7 @@ Ndarray = NDArray[float64] | NDArray[int32]
 Numeric = Union[float, int]
 
 # Prior types
-GPPrior = Tuple[Callable[..., Parameter | Numeric], List[Any]]
+GPPrior = Mapping[str, Union[Parameter, Numeric]]
 """
 Type for Gaussian Process priors.
 
@@ -42,7 +38,7 @@ Values:
     - `Parameter` used for transformed parameters e.g: Softplus.
     - `Numeric` used for numeric initial values.
 """
-GPPriorFactory = Mapping[str, GPPrior]
+GPPriorFactory = Callable[..., GPPrior]
 """
 Type for Gaussian Process prior factories.
 

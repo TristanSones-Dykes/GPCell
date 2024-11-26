@@ -2,7 +2,6 @@
 from typing import Mapping
 
 # Third-Party Library Imports
-from requests import get
 from tensorflow import Module
 
 # Direct Namespace Imports
@@ -23,7 +22,6 @@ def _multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
         Dictionary of parameters to assign
     """
     for key, value in parameters.items():
-        print(value.transform)
         _set_parameter_by_key(module, key, value)
 
 
@@ -55,8 +53,4 @@ def _set_parameter_by_key(module: Module, key: str, value: GPPrior):
             target = getattr(target, part)
 
     # Finally, set the parameter
-    print(f"Set {key} to {value.transform}")
     setattr(target, parts[-1], value)
-
-    print(target)
-    print(getattr(target, parts[-1]).transform)

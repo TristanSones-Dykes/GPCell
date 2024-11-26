@@ -86,10 +86,13 @@ class OscillatorDetector:
         self.mean_std, self.bckgd_GPs = background_noise(self.X_bckgd, self.bckgd, 7.0)
         self.noise_list = [self.mean_std / std(y) for y in self.Y]
 
-        """# --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 3)
+        # --- detrend data --- #
+        self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 7.0)
 
-        # --- fit OU and OU+Oscillator models --- #
+        self.plot("background")
+        self.plot("detrend")
+
+        """# --- fit OU and OU+Oscillator models --- #
         def fit_ou_ouosc(X, Y, noise, K):
             OU_LL_list, OUosc_LL_list = [[] for _ in range(2)]
 

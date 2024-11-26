@@ -62,7 +62,7 @@ class GPRConstructor:
                 assert operator is not None, ValueError(
                     "Operator must be provided for composite kernels"
                 )
-                self.kernel = lambda: reduce(operator, [k for k in kernels])
+                self.kernel = lambda: reduce(operator, [k() for k in kernels])
             case _:
                 raise TypeError(f"Invalid kernel type: {type(kernels)}")
 
@@ -74,13 +74,11 @@ class GPRConstructor:
         kernel = self.kernel()
         model = GPR((X, y), kernel)
 
-        prior_dict = {k: v(*args) for k, (v, args) in self.prior_gen.items()}
-        print("Prior dict:")
-        print(prior_dict["kernel.lengthscales"].transform)
-        # assign priors and set trainable parameters
+        # assign priors
+        prior_dict = self.prior_gen()
         _multiple_assign(model, prior_dict)
-        print("Model parameters 1:")
-        print(model.kernel.lengthscales.transform)
+
+        # set trainable parameters
         for param, trainable in self.trainable.items():
             match param:
                 case str(s):
@@ -91,12 +89,8 @@ class GPRConstructor:
                     attrs = s.split(".")
 
             for attr in attrs[:-1]:
-                print(obj)
                 obj = getattr(obj, attr)
             set_trainable(getattr(obj, attrs[-1]), trainable)
-
-        print("Model parameters 2:")
-        print(model.kernel.lengthscales.transform)
 
         return model
 
@@ -173,7 +167,6 @@ class GaussianProcess(GaussianProcessBase):
         )
 
         if verbose:
-            # print("Trained GP model:")
             print(gp_reg.parameters)
 
         self.log_posterior_density = gp_reg.log_posterior_density().numpy()
