@@ -98,8 +98,7 @@ class OscillatorDetector:
 
         # --- fit OU and OU*Oscillator processes --- #
 
-        # define kernels and priors
-        ou_kernel = Matern12
+        # define priors
         ou_priors = [
             lambda noise=noise: {
                 "kernel.lengthscales": uniform(0.1, 2.0),
@@ -108,8 +107,6 @@ class OscillatorDetector:
             }
             for noise in self.noise_list
         ]
-
-        ouosc_kernel = [Matern12, Cosine]
         ouosc_priors = [
             lambda noise=noise: {
                 "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
@@ -127,40 +124,64 @@ class OscillatorDetector:
             (1, "variance"): False,
         }
 
-        # fit processes
-        K = 10
-        ou_GPs = fit_processes(
+        def fit_ou_ouosc(
+            X, Y, ou_priors, ou_trainables, ouosc_priors, ouosc_trainables, K
+        ):
+            ou_kernel = Matern12
+            ouosc_kernel = [Matern12, Cosine]
+
+            # fit processes
+            ou_GPs = fit_processes(
+                X,
+                Y,
+                ou_kernel,
+                ou_priors,
+                replicates=K,
+                trainable=ou_trainables,
+            )
+            ouosc_GPs = fit_processes(
+                X,
+                Y,
+                ouosc_kernel,
+                ouosc_priors,
+                replicates=K,
+                trainable=ouosc_trainables,
+            )
+
+            # calculate LLR and BIC
+            LLRs, BIC_diffs, max_ou_GPs, max_ouosc_GPs = [[] for _ in range(4)]
+            for i, (y, ou, ouosc) in enumerate(
+                zip(self.Y_detrended, ou_GPs, ouosc_GPs)
+            ):
+                ou_LL = [gp.log_posterior_density for gp in ou]
+                ouosc_LL = [gp.log_posterior_density for gp in ouosc]
+
+                max_ou_ll = max(ou_LL)
+                max_ouosc_ll = max(ouosc_LL)
+                max_ou = ou[argmax(ou_LL)]
+                max_ouosc = ouosc[argmax(ouosc_LL)]
+
+                LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
+                BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
+                BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
+                BIC_diff = BIC_OU - BIC_OUosc
+
+                LLRs.append(LLR)
+                BIC_diffs.append(BIC_diff)
+                max_ou_GPs.append(max_ou)
+                max_ouosc_GPs.append(max_ouosc)
+
+            return LLRs, BIC_diffs, max_ou_GPs, max_ouosc_GPs
+
+        self.LLRs, self.BIC_diffs, self.ou_GPs, self.ouosc_GPs = fit_ou_ouosc(
             self.X,
             self.Y_detrended,
-            ou_kernel,
             ou_priors,
-            replicates=10,
-            trainable=ou_trainables,
-        )
-        ouosc_GPs = fit_processes(
-            self.X,
-            self.Y_detrended,
-            ouosc_kernel,
+            ou_trainables,
             ouosc_priors,
-            replicates=10,
-            trainable=ouosc_trainables,
+            ouosc_trainables,
+            10,
         )
-
-        self.LLRs, self.BIC_diffs, self.ou_GPs, self.ouosc_GPs = [[] for _ in range(4)]
-        for i, (y, ou, ouosc) in enumerate(zip(self.Y_detrended, ou_GPs, ouosc_GPs)):
-            ou_LL = [gp.log_posterior_density for gp in ou]
-            ouosc_LL = [gp.log_posterior_density for gp in ouosc]
-
-            max_ou_ll = max(ou_LL)
-            max_ouosc_ll = max(ouosc_LL)
-
-            LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
-            BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
-            BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
-            BIC_diff = BIC_OU - BIC_OUosc
-
-            self.LLRs.append(LLR)
-            self.BIC_diffs.append(BIC_diff)
 
         # --- plots --- #
         self.plot("BIC")
