@@ -4,7 +4,7 @@
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import argmax, ceil, log, sqrt, std, max, array, linspace, zeros
+from numpy import argmax, ceil, log, mean, sqrt, std, max, array, linspace, zeros
 from numpy.random import uniform, multivariate_normal
 from gpflow.kernels import White
 
@@ -83,8 +83,10 @@ class OscillatorDetector:
             print("Fitting background noise...")
 
         # --- background noise --- #
-        self.mean_std, self.bckgd_GPs = background_noise(self.X_bckgd, self.bckgd, 7.0)
-        self.noise_list = [self.mean_std / std(y) for y in self.Y]
+        self.mean_noise, self.bckgd_GPs = background_noise(
+            self.X_bckgd, self.bckgd, 7.0
+        )
+        self.noise_list = [self.mean_noise / std(y) for y in self.Y]
 
         # --- detrend data --- #
         self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 7.0)
@@ -215,45 +217,53 @@ class OscillatorDetector:
         """
         plot_size = int(15 / 5)
         if target == "background":
-            # generate grid for background models
+            # square grid of cells
             dim = int(ceil(sqrt(self.M)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
-            for i, m in enumerate(self.bckgd_GPs):
-                plt.subplot(dim, dim, i + 1)
-                m.test_plot(plot_sd=True)
-                plt.title(f"Background {i+1}")
-
-            plt.legend()
-            plt.tight_layout()
-        elif target == "detrend":
-            # square grid of cells
-            dim = int(ceil(sqrt(sum([1 for i in self.detrend_GPs if i is not None]))))
-            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
-
-            for i in range(self.N):
-                m = self.detrend_GPs[i]
-                y_detrended = self.Y_detrended[i]
-
-                # check properly fit
-                if m is None or y_detrended is None:
-                    continue
+            for i, (x_bckgd, y_bckgd, m) in enumerate(
+                zip(self.X_bckgd, self.bckgd, self.bckgd_GPs)
+            ):
+                # evaluate model
+                y_mean, y_var = m(self.X_bckgd[i])
+                deviation = sqrt(m.Y_var) * 2
+                y_bckgd_centred = y_bckgd - mean(y_bckgd)
 
                 # plot
                 plt.subplot(dim, dim, i + 1)
-                m.test_plot()  # detrended data
+                plt.plot(x_bckgd, y_mean, zorder=1, c="k", label="Fit GP")
+                plt.plot(x_bckgd, y_bckgd_centred, zorder=0, c="b", label="True Data")
+
+                # plot uncertainty
+                plt.plot(x_bckgd, y_mean + deviation, zorder=1, c="r")
+                plt.plot(x_bckgd, y_mean - deviation, zorder=1, c="r")
+                plt.title(f"Background {i+1}")
+
+        elif target == "detrend":
+            # square grid of cells
+            dim = int(ceil(sqrt(self.N)))
+            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
+
+            for i, (x, y, y_detrended, m) in enumerate(
+                zip(self.X, self.Y, self.Y_detrended, self.detrend_GPs)
+            ):
+                # standardise input, evaluate model
+                y_standardised = (y - mean(y)) / std(y)
+                y_trend = m(x)[0]
+
+                # plot
+                plt.subplot(dim, dim, i + 1)
+                plt.plot(x, y_standardised, label="True Data", color="b")
+                plt.plot(x, y_trend, label="Trend", color="k", linestyle="dashed")
                 plt.plot(
-                    self.X[i],
+                    x,
                     y_detrended,
                     label="Detrended",
                     color="orange",
-                    linestyle="dashed",
                 )
 
                 plt.title(f"Cell {i+1}")
 
-            plt.legend()
-            plt.tight_layout()
         elif target == "BIC":
             fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
@@ -269,3 +279,6 @@ class OscillatorDetector:
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of experimental cells")
+
+        plt.legend()
+        plt.tight_layout()

@@ -87,9 +87,9 @@ class TestOscillatorDetectorWithRealData(unittest.TestCase):
         """
         self.detector.run(verbose=True)
         # Check that mean_std is calculated properly (this is a placeholder, should be adjusted based on real expectations)
-        self.assertIsNotNone(self.detector.mean_std)
-        self.assertGreater(self.detector.mean_std, 0)
-        self.assertAlmostEqual(float(self.detector.mean_std), 7.239964458255131)
+        self.assertIsNotNone(self.detector.mean_noise)
+        self.assertGreater(self.detector.mean_noise, 0)
+        self.assertAlmostEqual(float(self.detector.mean_noise), 7.239964458255131)
 
 
 if __name__ == "__main__":

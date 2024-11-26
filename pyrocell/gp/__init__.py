@@ -66,24 +66,3 @@ class GaussianProcessBase(ABC, Generic[TensorLike]):
             Log likelihood of the Gaussian Process.
         """
         pass
-
-    @abstractmethod
-    def test_plot(
-        self,
-        X: Optional[TensorLike] = None,
-        y: Optional[TensorLike] = None,
-        plot_sd: bool = False,
-    ):
-        """
-        Plot the Gaussian Process model against the given data.
-
-        Parameters
-        ----------
-        X : Optional[TensorLike]
-            Input locations of the data.
-        y : Optional[TensorLike]
-            Output values of the data.
-        plot_sd : bool
-            Whether to plot the standard deviation of the Gaussian Process.
-        """
-        pass

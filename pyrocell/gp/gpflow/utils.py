@@ -38,6 +38,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    Y_var: bool = False,
     verbose: bool = False,
 ) -> List[GaussianProcess]: ...
 
@@ -52,6 +53,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    Y_var: bool = False,
     verbose: bool = False,
 ) -> List[List[GaussianProcess]]: ...
 
@@ -65,6 +67,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    Y_var: bool = False,
     verbose: bool = False,
 ) -> List[GaussianProcess] | List[List[GaussianProcess]]:
     """
@@ -92,8 +95,10 @@ def fit_processes(
         Dictionary to set trainable parameters (all are trainable by default)
     operator: Optional[GPOperator]
         Operator to combine multiple kernels,
-        preprocess: int
+    preprocess: int
         Preprocessing option (0: None, 1: Centre, 2: Standardise)
+    Y_var: bool
+        Calculate variance of missing data
     verbose: bool
         Print information
 
@@ -130,7 +135,7 @@ def fit_processes(
     for x, y, constructor in zip(X, Y_processed, constructors):
         new_processes = [GaussianProcess(constructor) for _ in range(replicates)]
         for process in new_processes:
-            process.fit(x, y)
+            process.fit(x, y, Y_var, verbose)
 
         processes.append(new_processes)
 
@@ -198,8 +203,8 @@ def detrend(
 
     # Detrend traces
     detrended = []
-    for y, m in zip(Y_standardised, GPs):
-        y_trend = m.mean
+    for x, y, m in zip(X, Y_standardised, GPs):
+        y_trend = m(x)[0]
         y_detrended = y - y_trend
         y_detrended = y_detrended - mean(y_detrended)
         detrended.append(y_detrended)
@@ -214,7 +219,7 @@ def background_noise(
     verbose: bool = False,
 ) -> Tuple[float64, List[GaussianProcess]]:
     """
-    Fit a background noise model to the data and return the standard deviation of the overall noise
+    Fit RBF processes to the input traces and calculate overall noise
 
     Parameters
     ----------
@@ -230,7 +235,7 @@ def background_noise(
     Returns
     -------
     Tuple[float64, List[GaussianProcess]]
-        Standard deviation of the overall noise, list of noise processes
+        Overall noise, list of noise processes
     """
 
     # Create prior generator
@@ -246,7 +251,7 @@ def background_noise(
     Y_centred = [y - mean(y) for y in Y]
 
     # Fit noise processes
-    processes = fit_processes(X, Y_centred, RBF, prior_gen, verbose=verbose)
+    processes = fit_processes(X, Y_centred, RBF, prior_gen, Y_var=True, verbose=verbose)
 
     # Calculate noise
     std_array = [gp.noise for gp in processes]
