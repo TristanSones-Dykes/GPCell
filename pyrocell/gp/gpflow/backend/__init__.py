@@ -1,22 +1,104 @@
 # Standard Library Imports
 from typing import Optional, Tuple
+from functools import reduce
+import operator
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import float64, array, sqrt
-from tensorflow import Tensor, convert_to_tensor, broadcast_to
+from numpy import sqrt
+
 import gpflow.optimizers as optimizers
-from gpflow.kernels import Matern12
+from gpflow.models import GPR
+from gpflow.utilities import set_trainable
 
 # Internal Project Imports
 from pyrocell.gp import GaussianProcessBase
-from pyrocell.gp.gpflow.backend.types import Ndarray, GPModel
+from pyrocell.gp.gpflow.backend.types import (
+    Ndarray,
+    GPPriorFactory,
+    GPKernel,
+    GPPriorTrainingFlag,
+    GPOperator,
+)
+from pyrocell.gp.gpflow.backend.utils import _multiple_assign
 
 # ------------------------------ #
 # --- Gaussian Process class --- #
 # ------------------------------ #
+
+
+class GPRConstructor:
+    """
+    Gaussian Process Regression constructor
+    """
+
+    def __init__(
+        self,
+        kernels: GPKernel,
+        prior_gen: GPPriorFactory,
+        trainable: GPPriorTrainingFlag = {},
+        operator: Optional[GPOperator] = operator.mul,
+    ):
+        """
+        Defines the kernel as a single kernel or a composite kernel using given operator
+
+        Parameters
+        ----------
+        kernels : Union[Kernel, List[Kernel]]
+            Single kernel or list of kernels
+        prior_gen : Callable[..., GPPriors]
+            Function that generates the priors for the GP model
+        trainable : Union[Mapping[str, bool], Mapping[Tuple[int, str], bool]], optional
+            Dictionary to set trainable parameters, by default {}
+        operator : Optional[Callable[[Kernel, Kernel], Kernel]], optional
+            Operator to combine multiple kernels, by default None
+        """
+        match kernels:
+            case type():
+                self.kernel = kernels
+            case list():
+                assert operator is not None, ValueError(
+                    "Operator must be provided for composite kernels"
+                )
+                self.kernel = lambda: reduce(operator, [k for k in kernels])
+            case _:
+                raise TypeError(f"Invalid kernel type: {type(kernels)}")
+
+        self.prior_gen = prior_gen
+        self.trainable = trainable
+
+    def __call__(self, X: Ndarray, y: Ndarray) -> GPR:
+        # create new kernel and define model
+        kernel = self.kernel()
+        model = GPR((X, y), kernel)
+
+        prior_dict = {k: v(*args) for k, (v, args) in self.prior_gen.items()}
+        print("Prior dict:")
+        print(prior_dict["kernel.lengthscales"].transform)
+        # assign priors and set trainable parameters
+        _multiple_assign(model, prior_dict)
+        print("Model parameters 1:")
+        print(model.kernel.lengthscales.transform)
+        for param, trainable in self.trainable.items():
+            match param:
+                case str(s):
+                    obj = model
+                    attrs = s.split(".")
+                case (int(i), str(s)):
+                    obj = model.kernel.kernels[i]  # type: ignore
+                    attrs = s.split(".")
+
+            for attr in attrs[:-1]:
+                print(obj)
+                obj = getattr(obj, attr)
+            set_trainable(getattr(obj, attrs[-1]), trainable)
+
+        print("Model parameters 2:")
+        print(model.kernel.lengthscales.transform)
+
+        return model
 
 
 class GaussianProcess(GaussianProcessBase):
@@ -24,8 +106,8 @@ class GaussianProcess(GaussianProcessBase):
     Gaussian Process model using GPflow.
     """
 
-    def __init__(self, model: GPModel):
-        self.model = model
+    def __init__(self, constructor: GPRConstructor):
+        self.constructor = constructor
         """Regression with kernel for the Gaussian Process"""
 
     def __call__(
@@ -79,9 +161,9 @@ class GaussianProcess(GaussianProcessBase):
             Success status
         """
 
-        gp_reg = self.model(X, y)
+        gp_reg = self.constructor(X, y)
 
-        self.X, self.y = X.copy(), y.copy()
+        self.X, self.y = X, y
         opt = optimizers.Scipy()
 
         opt.minimize(
@@ -159,23 +241,3 @@ class GaussianProcess(GaussianProcessBase):
         if plot_sd:
             plt.plot(X, mean + std, zorder=0, c="r")
             plt.plot(X, mean - std, zorder=0, c="r")
-
-
-# --- Kernel Subclasses --- #
-
-
-class SafeMatern12(Matern12):
-    """
-    Safe Matern 1/2 kernel (adds jitter to prevent numerical instability)
-    """
-
-    def __init__(self):
-        self.jitter = convert_to_tensor(array([1e-3], dtype=float64))
-        super().__init__()
-
-    def scaled_squared_euclid_dist(
-        self, X: Tensor, X2: Optional[Tensor] = None
-    ) -> Tensor:
-        dist = super().scaled_squared_euclid_dist(X, X2)
-
-        return dist + broadcast_to(self.jitter, dist.shape)

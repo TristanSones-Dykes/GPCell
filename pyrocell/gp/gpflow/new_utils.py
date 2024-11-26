@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import List, Optional, Sequence, Tuple, Union, overload
+from typing import List, Optional, Sequence, Tuple, Union, Optional, overload
 import operator
 
 # Third-Party Library Imports
@@ -11,7 +11,7 @@ from numpy import float64, nonzero, std, mean, max, min
 
 from gpflow import Parameter
 from gpflow.kernels import RBF
-from gpflow.utilities import to_default_float, deepcopy
+from gpflow.utilities import to_default_float
 
 # Internal Project Imports
 from pyrocell.gp.gpflow.backend.types import (
@@ -70,8 +70,8 @@ def fit_processes(
     """
     Fit Gaussian Processes to the data according the the number of prior generators and replicates.
 
-    `N` traces and `M` replicates will result in `N * M` models. If `N` generators are provided, each generator will
-    be used for `M` replicates on the corresponding trace.
+    N traces and M replicates will result in N * M models. If N generators are provided, each generator will
+    be used for M replicates on the corresponding trace.
 
     If there is only one replicate, the output will be a list of models. If there are multiple replicates, the output
     will be a list of lists of models.
@@ -104,7 +104,7 @@ def fit_processes(
     """
     # Generators and dimension checks
     match prior_gen:
-        case dict(gen):
+        case gen if callable(gen):
             constructors = [
                 GPRConstructor(kernels, gen, trainable, operator) for _ in Y
             ]
@@ -237,21 +237,14 @@ def background_noise(
         Standard deviation of the overall noise, list of noise processes
     """
 
-    def length_param(x):
-        param = Parameter(
-            to_default_float(x + 0.1),
-            transform=tfp.bijectors.Softplus(low=to_default_float(x)),
-        )
-        print(param.transform)
-        return param
-
     # Create prior generator
-    prior_gen = {
-        "kernel.lengthscales": (
-            length_param,
-            [lengthscale],
-        )
-    }
+    def prior_gen():
+        return {
+            ".kernel.lengthscales": Parameter(
+                to_default_float(lengthscale + 0.1),
+                transform=tfp.bijectors.Softplus(low=to_default_float(lengthscale)),
+            ),
+        }
 
     # Preprocess traces
     Y_centred = [y - mean(y) for y in Y]

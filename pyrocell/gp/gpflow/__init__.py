@@ -9,8 +9,12 @@ from numpy.random import uniform, multivariate_normal
 from gpflow.kernels import White
 
 # Internal Project Imports
-from pyrocell.gp.gpflow.models import OU, OUosc
-from pyrocell.gp.gpflow.utils import background_noise, detrend, load_data, fit_models
+from pyrocell.gp.gpflow.utils import (
+    background_noise,
+    detrend,
+    load_data,
+    fit_processes,
+)
 
 
 class OscillatorDetector:
@@ -82,8 +86,8 @@ class OscillatorDetector:
         self.mean_std, self.bckgd_GPs = background_noise(self.X_bckgd, self.bckgd, 7.0)
         self.noise_list = [self.mean_std / std(y) for y in self.Y]
 
-        # --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 7.0)
+        """# --- detrend data --- #
+        self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 3)
 
         # --- fit OU and OU+Oscillator models --- #
         def fit_ou_ouosc(X, Y, noise, K):
@@ -112,13 +116,13 @@ class OscillatorDetector:
             ]
 
             # fit models and extract posteriors
-            ou_GPs = fit_models(
+            ou_GPs = fit_single_process(
                 [X for _ in range(K)], [Y for _ in range(K)], OU, ou_prior
             )
             OU_LL_list = [gp.log_posterior_density for gp in ou_GPs]
             GP_ou = ou_GPs[argmax(OU_LL_list)]
 
-            ouosc_GPs = fit_models(
+            ouosc_GPs = fit_single_process(
                 [X for _ in range(K)], [Y for _ in range(K)], OUosc, ouosc_prior
             )
             OUosc_LL_list = [gp.log_posterior_density for gp in ouosc_GPs]
@@ -144,6 +148,11 @@ class OscillatorDetector:
             self.BIC_diffs.append(BIC_diff)
             self.ou_GPs.append(GP_ou)
             self.ouosc_GPs.append(GP_ouosc)
+
+        # --- plots --- #
+        for plot in plots:
+            self.plot(plot)
+        return
 
         # --- classification using synthetic cells --- #
         K = 10
@@ -190,11 +199,7 @@ class OscillatorDetector:
         plt.ylabel("Frequency")
         plt.title("LLRs of synthetic non-oscillatory OU cells")
 
-        plt.tight_layout()
-
-        # --- plots --- #
-        for plot in plots:
-            self.plot(plot)
+        plt.tight_layout()"""
 
     def plot(self, target: str):
         """
