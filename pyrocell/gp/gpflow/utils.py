@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import List, Optional, Sequence, Tuple, Union, overload
+from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
 import operator
 
 # Third-Party Library Imports
@@ -7,7 +7,7 @@ import pandas as pd
 import tensorflow_probability as tfp
 
 # Direct Namespace Imports
-from numpy import float64, nonzero, std, mean, max, min
+from numpy import float64, nonzero, std, mean, max
 
 from gpflow import Parameter
 from gpflow.kernels import RBF
@@ -55,7 +55,7 @@ def fit_processes(
     preprocess: int = 0,
     Y_var: bool = False,
     verbose: bool = False,
-) -> List[List[GaussianProcess]]: ...
+) -> Iterable[List[GaussianProcess]]: ...
 
 
 def fit_processes(
@@ -69,7 +69,7 @@ def fit_processes(
     preprocess: int = 0,
     Y_var: bool = False,
     verbose: bool = False,
-) -> List[GaussianProcess] | List[List[GaussianProcess]]:
+) -> List[GaussianProcess] | Iterable[List[GaussianProcess]]:
     """
     Fit Gaussian Processes to the data according the the number of prior generators and replicates.
 
@@ -131,19 +131,29 @@ def fit_processes(
             Y_processed = [(y - mean(y)) / std(y) for y in Y]
 
     # Fit processes
-    processes = []
-    for x, y, constructor in zip(X, Y_processed, constructors):
-        new_processes = [GaussianProcess(constructor) for _ in range(replicates)]
-        for process in new_processes:
-            process.fit(x, y, Y_var, verbose)
-
-        processes.append(new_processes)
-
     match replicates:
         case 1:
-            return [x[0] for x in processes]
-        case _:
+            processes = [GaussianProcess(constructor) for constructor in constructors]
+            for process, x, y in zip(processes, X, Y_processed):
+                process.fit(x, y, Y_var, verbose)
+
             return processes
+
+        case int(r) if r > 1:
+
+            def iterate_processes():
+                for x, y, constructor in zip(X, Y_processed, constructors):
+                    new_processes = [
+                        GaussianProcess(constructor) for _ in range(replicates)
+                    ]
+                    for i, process in enumerate(new_processes):
+                        process.fit(x, y, Y_var, verbose)
+
+                    yield new_processes
+
+            return iterate_processes()
+        case _:
+            raise ValueError(f"Invalid number of replicates: {replicates}")
 
 
 def detrend(
@@ -258,7 +268,7 @@ def background_noise(
     std = mean(std_array)
 
     if verbose:
-        print("Background noise results:")
+        print("\nBackground noise results:")
         print(f"Standard deviation: {std}")
 
     return std, processes

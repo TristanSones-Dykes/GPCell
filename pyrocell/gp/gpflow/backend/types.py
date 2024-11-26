@@ -26,7 +26,7 @@ from numpy.typing import NDArray
 
 # Convenience type aliases
 Ndarray = NDArray[float64] | NDArray[int32]
-Numeric = Union[float, int]
+Numeric = Union[float, int, float64, int32]
 
 # Prior types
 GPPrior = Mapping[str, Union[Parameter, Numeric]]

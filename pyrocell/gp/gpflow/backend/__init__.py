@@ -8,7 +8,7 @@ import operator
 # Direct Namespace Imports
 import gpflow.optimizers as optimizers
 from gpflow.models import GPR
-from gpflow.utilities import set_trainable
+from gpflow.utilities import set_trainable, print_summary
 from gpflow.posteriors import PrecomputeCacheType
 
 # Internal Project Imports
@@ -167,9 +167,6 @@ class GaussianProcess(GaussianProcessBase):
             gp_reg.trainable_variables,  # type: ignore
             options=dict(maxiter=100),
         )
-
-        if verbose:
-            print(gp_reg.parameters)
 
         # Extract training values and model parameters
         self.log_posterior_density = gp_reg.log_posterior_density().numpy()  # type: ignore

@@ -5,6 +5,7 @@ from typing import Mapping
 from tensorflow import Module
 
 # Direct Namespace Imports
+from gpflow import Parameter
 
 # Internal Project Imports
 from pyrocell.gp.gpflow.backend.types import GPPrior
@@ -53,4 +54,8 @@ def _set_parameter_by_key(module: Module, key: str, value: GPPrior):
             target = getattr(target, part)
 
     # Finally, set the parameter
-    setattr(target, parts[-1], value)
+    match value:
+        case Parameter():
+            setattr(target, parts[-1], value)
+        case _:
+            getattr(target, parts[-1]).assign(value)

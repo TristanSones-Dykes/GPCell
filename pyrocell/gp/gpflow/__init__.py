@@ -4,9 +4,9 @@
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import argmax, ceil, log, mean, sqrt, std, max, array, linspace, zeros
+from numpy import argmax, ceil, log, mean, sqrt, std, array, linspace, zeros, max
 from numpy.random import uniform, multivariate_normal
-from gpflow.kernels import White
+from gpflow.kernels import White, Matern12, Cosine
 
 # Internal Project Imports
 from pyrocell.gp.gpflow.utils import (
@@ -84,81 +84,88 @@ class OscillatorDetector:
 
         # --- background noise --- #
         self.mean_noise, self.bckgd_GPs = background_noise(
-            self.X_bckgd, self.bckgd, 7.0
+            self.X_bckgd, self.bckgd, 7.0, verbose=verbose
         )
         self.noise_list = [self.mean_noise / std(y) for y in self.Y]
 
         # --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 7.0)
+        self.Y_detrended, self.detrend_GPs = detrend(
+            self.X, self.Y, 7.0, verbose=verbose
+        )
 
         self.plot("background")
         self.plot("detrend")
 
-        """# --- fit OU and OU+Oscillator models --- #
-        def fit_ou_ouosc(X, Y, noise, K):
-            OU_LL_list, OUosc_LL_list = [[] for _ in range(2)]
+        # --- fit OU and OU*Oscillator processes --- #
 
-            # define priors
-            ou_prior = [
-                {
-                    "lengthscale": uniform(0.1, 2.0),
-                    "variance": uniform(0.1, 2.0),
-                    "likelihood_variance": noise**2,
-                    "train_likelihood": False,
-                }
-                for _ in range(K)
-            ]
-            ouosc_prior = [
-                {
-                    "lengthscale": uniform(0.1, 2.0),
-                    "variance": uniform(0.1, 2.0),
-                    "lengthscale_cos": uniform(0.1, 4.0),
-                    "likelihood_variance": noise**2,
-                    "train_likelihood": False,
-                    "train_osc_variance": False,
-                }
-                for _ in range(K)
-            ]
+        # define kernels and priors
+        ou_kernel = Matern12
+        ou_priors = [
+            lambda noise=noise: {
+                "kernel.lengthscales": uniform(0.1, 2.0),
+                "kernel.variance": uniform(0.1, 2.0),
+                "likelihood.variance": noise**2,
+            }
+            for noise in self.noise_list
+        ]
 
-            # fit models and extract posteriors
-            ou_GPs = fit_single_process(
-                [X for _ in range(K)], [Y for _ in range(K)], OU, ou_prior
-            )
-            OU_LL_list = [gp.log_posterior_density for gp in ou_GPs]
-            GP_ou = ou_GPs[argmax(OU_LL_list)]
+        ouosc_kernel = [Matern12, Cosine]
+        ouosc_priors = [
+            lambda noise=noise: {
+                "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
+                "kernel.kernels[0].variance": uniform(0.1, 2.0),
+                "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
+                "likelihood.variance": noise**2,
+            }
+            for noise in self.noise_list
+        ]
 
-            ouosc_GPs = fit_single_process(
-                [X for _ in range(K)], [Y for _ in range(K)], OUosc, ouosc_prior
-            )
-            OUosc_LL_list = [gp.log_posterior_density for gp in ouosc_GPs]
-            GP_ouosc = ouosc_GPs[argmax(OUosc_LL_list)]
+        # set trainables
+        ou_trainables = {"likelihood.variance": False}
+        ouosc_trainables = {
+            "likelihood.variance": False,
+            (1, "variance"): False,
+        }
 
-            LLR = 100 * 2 * (max(OUosc_LL_list) - max(OU_LL_list)) / len(Y)
-            BIC_OUosc = -2 * max(OUosc_LL_list) + 3 * log(len(Y))
-            BIC_OU = -2 * max(OU_LL_list) + 2 * log(len(Y))
-            BIC_diff = BIC_OU - BIC_OUosc
-
-            return LLR, BIC_diff, GP_ou, GP_ouosc
+        # fit processes
+        K = 10
+        ou_GPs = fit_processes(
+            self.X,
+            self.Y_detrended,
+            ou_kernel,
+            ou_priors,
+            replicates=10,
+            trainable=ou_trainables,
+        )
+        ouosc_GPs = fit_processes(
+            self.X,
+            self.Y_detrended,
+            ouosc_kernel,
+            ouosc_priors,
+            replicates=10,
+            trainable=ouosc_trainables,
+        )
 
         self.LLRs, self.BIC_diffs, self.ou_GPs, self.ouosc_GPs = [[] for _ in range(4)]
-        for i in range(self.N):
-            x_curr = self.X[i]
-            y_detrended = self.Y_detrended[i]
-            noise = self.noise_list[i]
+        for i, (y, ou, ouosc) in enumerate(zip(self.Y_detrended, ou_GPs, ouosc_GPs)):
+            ou_LL = [gp.log_posterior_density for gp in ou]
+            ouosc_LL = [gp.log_posterior_density for gp in ouosc]
 
-            LLR, BIC_diff, GP_ou, GP_ouosc = fit_ou_ouosc(
-                x_curr, y_detrended, noise, 10
-            )
+            max_ou_ll = max(ou_LL)
+            max_ouosc_ll = max(ouosc_LL)
+
+            LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
+            BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
+            BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
+            BIC_diff = BIC_OU - BIC_OUosc
+
             self.LLRs.append(LLR)
             self.BIC_diffs.append(BIC_diff)
-            self.ou_GPs.append(GP_ou)
-            self.ouosc_GPs.append(GP_ouosc)
 
         # --- plots --- #
-        for plot in plots:
-            self.plot(plot)
-        return
+        self.plot("BIC")
 
+        return
         # --- classification using synthetic cells --- #
         K = 10
         self.synth_LLRs = []
@@ -204,7 +211,7 @@ class OscillatorDetector:
         plt.ylabel("Frequency")
         plt.title("LLRs of synthetic non-oscillatory OU cells")
 
-        plt.tight_layout()"""
+        plt.tight_layout()
 
     def plot(self, target: str):
         """
@@ -253,13 +260,14 @@ class OscillatorDetector:
 
                 # plot
                 plt.subplot(dim, dim, i + 1)
-                plt.plot(x, y_standardised, label="True Data", color="b")
-                plt.plot(x, y_trend, label="Trend", color="k", linestyle="dashed")
                 plt.plot(
                     x,
                     y_detrended,
                     label="Detrended",
-                    color="orange",
+                )
+                plt.plot(x, y_standardised, label="True Data")
+                plt.plot(
+                    x, y_trend, label="Trend", color="k", alpha=0.5, linestyle="dashed"
                 )
 
                 plt.title(f"Cell {i+1}")
@@ -274,8 +282,8 @@ class OscillatorDetector:
                 )
             )
 
-            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40))  # type: ignore
-            plt.plot([cutoff, cutoff], [0, 2], "r--")
+            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")  # type: ignore
+            plt.plot([cutoff, cutoff], [0, 2], "r--", label="Cutoff")
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of experimental cells")
