@@ -153,13 +153,13 @@ class OscillatorDetector:
             for i, (y, ou, ouosc) in enumerate(
                 zip(self.Y_detrended, ou_GPs, ouosc_GPs)
             ):
-                ou_LL = [gp.log_posterior_density for gp in ou]
-                ouosc_LL = [gp.log_posterior_density for gp in ouosc]
+                ou_LL = [gp.log_posterior_density for gp in ou]  # type: ignore
+                ouosc_LL = [gp.log_posterior_density for gp in ouosc]  # type: ignore
 
                 max_ou_ll = max(ou_LL)
                 max_ouosc_ll = max(ouosc_LL)
-                max_ou = ou[argmax(ou_LL)]
-                max_ouosc = ouosc[argmax(ouosc_LL)]
+                max_ou = ou[argmax(ou_LL)]  # type: ignore
+                max_ouosc = ouosc[argmax(ouosc_LL)]  # type: ignore
 
                 LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
                 BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
@@ -186,7 +186,6 @@ class OscillatorDetector:
         # --- plots --- #
         self.plot("BIC")
 
-        return
         # --- classification using synthetic cells --- #
         K = 10
         self.synth_LLRs = []
@@ -195,13 +194,14 @@ class OscillatorDetector:
 
         # for each cell, make K synthetic cells
         for i in range(self.N):
+            print(i)
             X = self.X[i]
             noise = self.noise_list[i]
 
             # configure synthetic cell kernel
             k_se = detrend_kernels[i]
             k_ou = OU_kernels[i]
-            k_white = White(variance=noise**2)
+            k_white = White(variance=noise**2)  # type: ignore
             k_synth = k_se + k_ou + k_white
 
             # generate and detrend synthetic cell
@@ -212,11 +212,17 @@ class OscillatorDetector:
             synths_detrended, synth_GPs = detrend([X for _ in range(K)], synths, 7.0)
 
             # fit OU and OU+Oscillator models
-            for j in range(K):
-                LLR, BIC_diff, GP_ou, GP_ouosc = fit_ou_ouosc(
-                    X, synths_detrended[j], noise, 10
-                )
-                self.synth_LLRs.append(LLR)
+            LLRs, _, _, _ = fit_ou_ouosc(
+                [X for _ in range(K)],
+                synths_detrended,
+                [ou_priors[i] for _ in range(K)],
+                ou_trainables,
+                [ouosc_priors[i] for _ in range(K)],
+                ouosc_trainables,
+                K,
+            )
+
+            self.synth_LLRs.extend(LLRs)
 
         fig = plt.figure(figsize=(20 / 2.54, 10 / 2.54))
 
