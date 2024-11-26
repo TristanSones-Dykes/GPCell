@@ -8,7 +8,7 @@ import operator
 # Direct Namespace Imports
 import gpflow.optimizers as optimizers
 from gpflow.models import GPR
-from gpflow.utilities import set_trainable, print_summary
+from gpflow.utilities import set_trainable
 from gpflow.posteriors import PrecomputeCacheType
 
 # Internal Project Imports
@@ -20,7 +20,7 @@ from pyrocell.gp.gpflow.backend.types import (
     GPPriorTrainingFlag,
     GPOperator,
 )
-from pyrocell.gp.gpflow.backend.utils import _multiple_assign
+from pyrocell.gp.gpflow.backend.utils import multiple_assign
 
 NOCACHE = PrecomputeCacheType.NOCACHE
 
@@ -76,7 +76,7 @@ class GPRConstructor:
 
         # assign priors
         prior_dict = self.prior_gen()
-        _multiple_assign(model, prior_dict)
+        multiple_assign(model, prior_dict)
 
         # set trainable parameters
         for param, trainable in self.trainable.items():
@@ -178,13 +178,12 @@ class GaussianProcess(GaussianProcessBase):
         # Keep the posterior for predictions
         self.fit_gp = gp_reg.posterior()
 
-    def log_likelihood(
+    def log_posterior(
         self,
         y: Optional[Ndarray] = None,
     ) -> Ndarray:
         """
-        Calculates the log-marginal likelihood for the Gaussian process.
-        If no target values are input, calculates log likelihood for data is was it on.
+        Compute the log posterior density of the model
 
         Parameters
         ----------
@@ -193,7 +192,7 @@ class GaussianProcess(GaussianProcessBase):
 
         Returns
         -------
-        Tensor
-            Log-likelihood
+        Ndarray
+            Log posterior density
         """
         return self.log_posterior_density

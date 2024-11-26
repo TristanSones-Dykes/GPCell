@@ -11,7 +11,7 @@ from gpflow import Parameter
 from pyrocell.gp.gpflow.backend.types import GPPrior
 
 
-def _multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
+def multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
     """
     Assigns parameters in a dictionary to the Module (tf.Module or gpflow.Module)
 

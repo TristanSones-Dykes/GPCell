@@ -182,7 +182,7 @@ class OscillatorDetector:
                 jitter=jitter,
             )
             if success:
-                self.OU_LL[i] = ou.log_likelihood()
+                self.OU_LL[i] = ou.log_posterior()
 
             ouosc = OUosc(ou_priors, osc_priors)
             success = ouosc.fit(
@@ -193,7 +193,7 @@ class OscillatorDetector:
                 jitter=jitter,
             )
             if success:
-                self.OUosc_LL[i] = ouosc.log_likelihood()
+                self.OUosc_LL[i] = ouosc.log_posterior()
 
             self.y_detrend[i] = y_detrended
             self.model_detrend[i] = noise_model

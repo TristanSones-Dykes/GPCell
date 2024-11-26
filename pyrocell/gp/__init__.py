@@ -50,7 +50,7 @@ class GaussianProcessBase(ABC, Generic[TensorLike]):
         pass
 
     @abstractmethod
-    def log_likelihood(self, y: Optional[TensorLike] = None) -> TensorLike:
+    def log_posterior(self, y: Optional[TensorLike] = None) -> TensorLike:
         """
         Compute the log likelihood of the Gaussian Process against the given response data.
         If no response data is provided, the log likelihood of the fit data is returned.

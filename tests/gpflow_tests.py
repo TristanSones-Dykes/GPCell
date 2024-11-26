@@ -95,6 +95,12 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
+    def test_bootstrap_classification(self):
+        """
+        Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
+        """
+        self.assertEqual(sum(self.detector.osc_filt), 10)
+
 
 if __name__ == "__main__":
     unittest.main()

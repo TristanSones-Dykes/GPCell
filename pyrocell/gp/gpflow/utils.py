@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Iterable, List, Optional, Sequence, Tuple, Union, overload
+from typing import Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
 import operator
 
 # Third-Party Library Imports
@@ -34,7 +34,7 @@ def fit_processes(
     Y: Sequence[Ndarray],
     kernels: GPKernel,
     prior_gen: Union[GPPriorFactory, Sequence[GPPriorFactory]],
-    replicates: int = 1,
+    replicates: Literal[1] = 1,
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,

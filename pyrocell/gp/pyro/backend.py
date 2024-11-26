@@ -196,7 +196,7 @@ class GaussianProcess(GaussianProcessBase):
 
         return True
 
-    def log_likelihood(self, y: Optional[Tensor] = None) -> Tensor:
+    def log_posterior(self, y: Optional[Tensor] = None) -> Tensor:
         """
         Calculates the log-marginal likelihood for the Gaussian process.
         If no target values are input, calculates log likelihood for data is was it on.
