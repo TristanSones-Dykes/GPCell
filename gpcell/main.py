@@ -28,13 +28,8 @@ from scipy.interpolate import CubicSpline
 from gpflow.kernels import White, Matern12, Cosine, Kernel
 
 # Internal Project Imports
-from pyrocell.gp.gpflow.backend import GaussianProcess
-from pyrocell.gp.gpflow.utils import (
-    background_noise,
-    detrend,
-    load_data,
-    fit_processes,
-)
+from gpcell.backend import GaussianProcess
+from .utils import load_data, fit_processes, background_noise, detrend
 
 
 class OscillatorDetector:

@@ -14,14 +14,15 @@ from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
 
 # Internal Project Imports
-from pyrocell.gp.gpflow.backend.types import (
+from gpcell.backend import GaussianProcess, GPRConstructor
+from gpcell.backend.types import (
     Ndarray,
     GPKernel,
     GPPriorFactory,
     GPPriorTrainingFlag,
     GPOperator,
 )
-from pyrocell.gp.gpflow.backend import GaussianProcess, GPRConstructor
+
 
 # -----------------------------------#
 # --- Pyrocell utility functions --- #
@@ -82,30 +83,30 @@ def fit_processes(
     Parameters
     ----------
     X: List[Ndarray]
-        List of input domains
+            List of input domains
     Y: List[Ndarray]
-        List of input traces
+            List of input traces
     kernels: GPKernel
-        Kernel(s) in the model
+            Kernel(s) in the model
     prior_gen: GPPriorFactory
-        Function that generates priors for the model
+            Function that generates priors for the model
     replicates: int
-        Number of replicates to fit for each prior generator
+            Number of replicates to fit for each prior generator
     trainable: GPPriorTrainingFlag
-        Dictionary to set trainable parameters (all are trainable by default)
+            Dictionary to set trainable parameters (all are trainable by default)
     operator: Optional[GPOperator]
-        Operator to combine multiple kernels,
+            Operator to combine multiple kernels,
     preprocess: int
-        Preprocessing option (0: None, 1: Centre, 2: Standardise)
+            Preprocessing option (0: None, 1: Centre, 2: Standardise)
     Y_var: bool
-        Calculate variance of missing data
+            Calculate variance of missing data
     verbose: bool
-        Print information
+            Print information
 
     Returns
     -------
     List[GaussianProcess]
-        List of fitted models
+            List of fitted models
     """
     # Generators and dimension checks
     match prior_gen:
@@ -168,18 +169,18 @@ def detrend(
     Parameters
     ----------
     X: List[Ndarray]
-        List of input domains
+            List of input domains
     Y: List[Ndarray]
-        List of input traces
+            List of input traces
     detrend_lengthscale: float | int
-        Lengthscale of the detrending process, or integer portion of trace length
+            Lengthscale of the detrending process, or integer portion of trace length
     verbose: bool
-        Print information
+            Print information
 
     Returns
     -------
     Tuple[List[Ndarray], List[GaussianProcess]]
-        Detrended traces, list of fit models
+            Detrended traces, list of fit models
     """
     # Preprocess traces
     Y_standardised = [(y - mean(y)) / std(y) for y in Y]
@@ -234,18 +235,18 @@ def background_noise(
     Parameters
     ----------
     X: List[Ndarray]
-        List of input domains
+            List of input domains
     Y: List[Ndarray]
-        List of input traces
+            List of input traces
     lengthscale: float
-        Lengthscale of the noise model
+            Lengthscale of the noise model
     verbose: bool
-        Print information
+            Print information
 
     Returns
     -------
     Tuple[float64, List[GaussianProcess]]
-        Overall noise, list of noise processes
+            Overall noise, list of noise processes
     """
 
     # Create prior generator
@@ -274,9 +275,7 @@ def background_noise(
     return std, processes
 
 
-def load_data(
-    path: str, X_name: str, Y_name: str
-) -> Tuple[
+def load_data(path: str, X_name: str, Y_name: str) -> Tuple[
     List[Ndarray],
     List[Ndarray],
 ]:

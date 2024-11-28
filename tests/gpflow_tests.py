@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 
 # import pyrocell for testing
-import pyrocell.gp.gpflow as pc
+import gpcell as gc
 
 
 class TestOscillatorDetectorMethods(unittest.TestCase):
@@ -30,7 +30,7 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         self.addCleanup(patcher.stop)
 
         # Create OscillatorDetector instance
-        self.detector = pc.OscillatorDetector(
+        self.detector = gc.OscillatorDetector(
             path=self.sample_data_path,
             X_name=self.X_name,
             background_name=self.background_name,
@@ -73,7 +73,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         Y_name = "Cell"
 
         # Create OscillatorDetector instance with Hes dataset
-        cls.detector = pc.OscillatorDetector(
+        cls.detector = gc.OscillatorDetector(
             path=path,
             X_name=X_name,
             background_name=background_name,

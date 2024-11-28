@@ -8,7 +8,7 @@ from tensorflow import Module
 from gpflow import Parameter
 
 # Internal Project Imports
-from pyrocell.gp.gpflow.backend.types import GPPrior
+from .types import GPPrior
 
 
 def multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:

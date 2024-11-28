@@ -1,22 +1,15 @@
-name: Pyrocell
+name: gpcell
 channels:
-  - bioconda
   - defaults
   - conda-forge
 dependencies:
-  - pytorch::pytorch
-  - torchvision
-  - torchaudio
-  - pyro-ppl
-  - ca-certificates
-  - certifi
-  - openssl
   - numpy
   - matplotlib
-  - jupyter
   - pandas
   - pdoc
+  - ipykernel
   - tensorflow
   - tensorflow-probability
   - gpflow
   - tf-keras
+  - black

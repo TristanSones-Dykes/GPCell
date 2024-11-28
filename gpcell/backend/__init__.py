@@ -12,15 +12,8 @@ from gpflow.utilities import set_trainable
 from gpflow.posteriors import PrecomputeCacheType
 
 # Internal Project Imports
-from pyrocell.gp import GaussianProcessBase
-from pyrocell.gp.gpflow.backend.types import (
-    Ndarray,
-    GPPriorFactory,
-    GPKernel,
-    GPPriorTrainingFlag,
-    GPOperator,
-)
-from pyrocell.gp.gpflow.backend.utils import multiple_assign
+from .types import Ndarray, GPKernel, GPPriorFactory, GPPriorTrainingFlag, GPOperator
+from .utils import multiple_assign
 
 NOCACHE = PrecomputeCacheType.NOCACHE
 
@@ -95,7 +88,7 @@ class GPRConstructor:
         return model
 
 
-class GaussianProcess(GaussianProcessBase):
+class GaussianProcess:
     """
     Gaussian Process model using GPflow.
     """
