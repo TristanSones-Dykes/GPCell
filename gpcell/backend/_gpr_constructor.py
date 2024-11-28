@@ -10,8 +10,8 @@ from gpflow.models import GPR
 from gpflow.utilities import set_trainable
 
 # Internal Project Imports
-from .types import Ndarray, GPKernel, GPPriorFactory, GPPriorTrainingFlag, GPOperator
-from .utils import multiple_assign
+from ._types import Ndarray, GPKernel, GPPriorFactory, GPPriorTrainingFlag, GPOperator
+from ._utils import multiple_assign
 
 
 class GPRConstructor:

@@ -8,8 +8,8 @@ import gpflow.optimizers as optimizers
 from gpflow.posteriors import PrecomputeCacheType
 
 # Internal Project Imports
-from .types import Ndarray
-from .GPRConstructor import GPRConstructor
+from ._types import Ndarray
+from ._gpr_constructor import GPRConstructor
 
 
 NOCACHE = PrecomputeCacheType.NOCACHE

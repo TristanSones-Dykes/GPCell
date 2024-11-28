@@ -8,7 +8,7 @@ from tensorflow import Module
 from gpflow import Parameter
 
 # Internal Project Imports
-from .types import GPPrior
+from ._types import GPPrior
 
 
 def multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
