@@ -199,7 +199,7 @@ class OscillatorDetector:
                 BIC_diff = BIC_OU - BIC_OUosc
 
                 # calculate period
-                cov_ou_osc = k_ouosc(x).numpy()[0, :]
+                cov_ou_osc = k_ouosc(x).numpy()[0, :]  # type: ignore
                 peaks, _ = find_peaks(cov_ou_osc, height=0)
 
                 if len(peaks) != 0:
@@ -230,6 +230,7 @@ class OscillatorDetector:
         if plots and "BIC" in plots:
             self.plot("BIC")
 
+        return
         # --- classification using synthetic cells --- #
         K = 10
         self.synth_LLRs = []

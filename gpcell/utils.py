@@ -14,9 +14,10 @@ from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
 
 # Internal Project Imports
-from gpcell.backend import GaussianProcess, GPRConstructor
-from gpcell.backend.types import (
+from gpcell.backend import (
     Ndarray,
+    GaussianProcess,
+    GPRConstructor,
     GPKernel,
     GPPriorFactory,
     GPPriorTrainingFlag,
@@ -24,9 +25,9 @@ from gpcell.backend.types import (
 )
 
 
-# -----------------------------------#
-# --- Pyrocell utility functions --- #
-# -----------------------------------#
+# ---------------------------------#
+# --- gpcell utility functions --- #
+# ---------------------------------#
 
 
 @overload
@@ -275,7 +276,9 @@ def background_noise(
     return std, processes
 
 
-def load_data(path: str, X_name: str, Y_name: str) -> Tuple[
+def load_data(
+    path: str, X_name: str, Y_name: str
+) -> Tuple[
     List[Ndarray],
     List[Ndarray],
 ]:
