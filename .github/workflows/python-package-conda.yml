@@ -34,7 +34,7 @@ jobs:
           flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
       - name: Compile pdoc
         run: |
-          pdoc -o docs gpcell
+          pdoc --docformat numpy -o docs gpcell
       - name: Upload GitHub Pages artifact
         uses: actions/upload-pages-artifact@v3.0.1
         with:
