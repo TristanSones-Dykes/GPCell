@@ -39,7 +39,7 @@ jobs:
         uses: actions/upload-pages-artifact@v3.0.1
         with:
           # Artifact name
-          name: pyrocell-pages
+          name: gpcell-pages
           # Path of the directory containing the static assets.
           path: docs/
           # Duration after which artifact will expire in days.
@@ -48,7 +48,7 @@ jobs:
     needs: build-docs
     runs-on: ubuntu-latest
     environment:
-      name: pyrocell-pages
+      name: gpcell-pages
     steps:
       - name: Deploy GitHub Pages site
         uses: actions/deploy-pages@v4.0.5
@@ -56,6 +56,6 @@ jobs:
           # GitHub token
           token: ${{ github.token }}
           # Name of the artifact to deploy
-          artifact_name: pyrocell-pages
+          artifact_name: gpcell-pages
           
           
