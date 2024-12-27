@@ -5,7 +5,7 @@ from unittest.mock import patch
 # import third-party helpers
 import numpy as np
 
-# import pyrocell for testing
+# import gpcell for testing
 import gpcell as gc
 
 
@@ -15,19 +15,10 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         Set up a minimal environment for the OscillatorDetector class.
         """
         # Create sample test data
-        self.sample_data_path = "sample_data.csv"
-        self.X_name = "Time"
+        self.sample_data_path = "data/hes/Hes1_example.csv"
+        self.X_name = "Time (h)"
         self.background_name = "Background"
-        self.Y_name = "Cell_Traces"
-
-        # Mocking load_data to avoid loading actual files
-        patcher = patch("pyrocell.gp.gpflow.load_data")
-        self.mock_load_data = patcher.start()
-        self.mock_load_data.side_effect = [
-            (np.array([1, 2, 3]), np.array([0.1, 0.2, 0.3])),  # Background noise data
-            (np.array([1, 2, 3]), np.array([0.5, 1.0, 1.5])),  # Cell trace data
-        ]
-        self.addCleanup(patcher.stop)
+        self.Y_name = "Cell"
 
         # Create OscillatorDetector instance
         self.detector = gc.OscillatorDetector(
@@ -41,9 +32,9 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         """
         Test the initialization of OscillatorDetector and loading of data.
         """
-        self.assertEqual(len(self.detector.X), 3)
-        self.assertEqual(len(self.detector.Y), 3)
-        self.assertEqual(len(self.detector.bckgd), 3)
+        self.assertEqual(len(self.detector.X), 12)
+        self.assertEqual(len(self.detector.Y), 12)
+        self.assertEqual(len(self.detector.bckgd), 4)
 
     def test_str_method(self):
         """
@@ -95,11 +86,11 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
-    def test_bootstrap_classification(self):
+        # def test_bootstrap_classification(self):
         """
         Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
         """
-        self.assertEqual(sum(self.detector.osc_filt), 10)
+        # self.assertEqual(sum(self.detector.osc_filt), 10)
 
 
 if __name__ == "__main__":

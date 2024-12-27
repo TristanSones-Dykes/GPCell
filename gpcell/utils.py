@@ -1,5 +1,15 @@
 # Standard Library Imports
-from typing import Iterable, List, Literal, Optional, Sequence, Tuple, Union, overload
+from typing import (
+    Callable,
+    Iterable,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+    overload,
+)
 import operator
 
 # Third-Party Library Imports
@@ -10,7 +20,7 @@ import tensorflow_probability as tfp
 from numpy import float64, nonzero, std, mean, max
 
 from gpflow import Parameter
-from gpflow.kernels import RBF
+from gpflow.kernels import RBF, Matern12, Cosine
 from gpflow.utilities import to_default_float
 
 # Internal Project Imports
@@ -22,6 +32,8 @@ from gpcell.backend import (
     GPPriorFactory,
     GPPriorTrainingFlag,
     GPOperator,
+    GPPrior,
+    Numeric,
 )
 
 
@@ -42,7 +54,7 @@ def fit_processes(
     preprocess: int = 0,
     Y_var: bool = False,
     verbose: bool = False,
-) -> List[GaussianProcess]: ...
+) -> List[List[GaussianProcess]]: ...
 
 
 @overload
@@ -71,15 +83,15 @@ def fit_processes(
     preprocess: int = 0,
     Y_var: bool = False,
     verbose: bool = False,
-) -> List[GaussianProcess] | Iterable[List[GaussianProcess]]:
+) -> List[List[GaussianProcess]] | Iterable[List[GaussianProcess]]:
     """
     Fit Gaussian Processes to the data according the the number of prior generators and replicates.
 
     N traces and M replicates will result in N * M models. If N generators are provided, each generator will
     be used for M replicates on the corresponding trace.
 
-    If there is only one replicate, the output will be a list of models. If there are multiple replicates, the output
-    will be a list of lists of models.
+    If there is only one replicate, the output will be a list of `[[models]]`. If there are multiple replicates, the output
+    will be an iterator of lists of models.
 
     Parameters
     ----------
@@ -139,7 +151,7 @@ def fit_processes(
             for process, x, y in zip(processes, X, Y_processed):
                 process.fit(x, y, Y_var, verbose)
 
-            return processes
+            return [processes]
 
         case int(r) if r > 1:
 
@@ -211,7 +223,7 @@ def detrend(
             ]
 
     # Fit detrending processes
-    GPs = fit_processes(X, Y_standardised, RBF, prior_gen, verbose=verbose)
+    GPs = fit_processes(X, Y_standardised, RBF, prior_gen, verbose=verbose)[0]
 
     # Detrend traces
     detrended = []
@@ -263,7 +275,9 @@ def background_noise(
     Y_centred = [y - mean(y) for y in Y]
 
     # Fit noise processes
-    processes = fit_processes(X, Y_centred, RBF, prior_gen, Y_var=True, verbose=verbose)
+    processes = fit_processes(
+        X, Y_centred, RBF, prior_gen, Y_var=True, verbose=verbose
+    )[0]
 
     # Calculate noise
     std_array = [gp.noise for gp in processes]
@@ -276,6 +290,144 @@ def background_noise(
     return std, processes
 
 
+def fit_ou(
+    X: List[Ndarray],
+    Y: List[Ndarray],
+    lengthscale_prior: Callable[..., GPPrior] | List[Numeric],
+    variance_prior: Callable[..., GPPrior] | List[Numeric],
+    likelihood_variance: Callable[..., GPPrior] | List[Numeric],
+    trainable_likelihood_variance: bool = True,
+    K: int = 1,
+) -> List[List[GaussianProcess]] | Iterable[List[GaussianProcess]]:
+    """
+    Fit Ornstein-Uhlenbeck process to the input trace
+
+    Parameters
+    ----------
+    X: Ndarray
+            Input domain
+    Y: Ndarray
+            Input trace
+    lengthscale_prior: Callable[..., GPPrior]
+            Prior for the lengthscale parameter
+    variance_prior: Callable[..., GPPrior]
+            Prior for the variance parameter
+    likelihood_variance: Callable[..., GPPrior]
+            Prior for the likelihood variance
+    K: int
+            Number of replicates
+
+    Returns
+    -------
+    Tuple[List[float], List[float], List[Kernel], List[Kernel], List[float]]
+            List of fitted parameters
+    """
+    # define priors
+    prior_list = []
+    for param in [lengthscale_prior, variance_prior, likelihood_variance]:
+        if callable(param):
+            prior_list.append([param for _ in range(len(Y))])
+        else:
+            prior_list.append(param)
+
+    ou_priors = [
+        lambda: {
+            "kernel.lengthscales": lengthscale,
+            "kernel.variance": variance,
+            "likelihood.variance": likelihood,
+        }
+        for lengthscale, variance, likelihood in zip(*prior_list)
+    ]
+    ou_trainable = {"likelihood.variance": trainable_likelihood_variance}
+
+    # fit OU processes
+    return fit_processes(
+        X, Y, Matern12, ou_priors, replicates=K, trainable=ou_trainable
+    )
+
+
+def fit_ou_osc(
+    X: List[Ndarray],
+    Y: List[Ndarray],
+    ou_lengthscale_prior: Callable[..., GPPrior] | List[Numeric],
+    ou_variance_prior: Callable[..., GPPrior] | List[Numeric],
+    osc_lengthscale_prior: Callable[..., GPPrior] | List[Numeric],
+    likelihood_variance: Callable[..., GPPrior] | List[Numeric],
+    ou_trainable_variance: bool = True,
+    osc_trainable_variance: bool = True,
+    trainable_likelihood_variance: bool = True,
+    K: int = 1,
+) -> List[List[GaussianProcess]] | Iterable[List[GaussianProcess]]:
+    """
+    Fit Ornstein-Uhlenbeck * Cosine process to the input trace
+
+    Parameters
+    ----------
+    X: Ndarray
+            Input domain
+    Y: Ndarray
+            Input trace
+    ou_lengthscale_prior: Callable[..., GPPrior]
+            Prior for the OU lengthscale parameter
+    ou_variance_prior: Callable[..., GPPrior]
+            Prior for the OU variance parameter
+    osc_lengthscale_prior: Callable[..., GPPrior]
+            Prior for the cosine lengthscale parameter
+    likelihood_variance: Callable[..., GPPrior]
+            Prior for the likelihood variance
+    ou_trainable_variance: bool
+            Trainable variance for OU process
+    osc_trainable_variance: bool
+            Trainable variance for cosine process
+    trainable_likelihood_variance: bool
+            Trainable likelihood variance
+    K: int
+            Number of replicates
+
+    Returns
+    -------
+    List[List[GaussianProcess]] | Iterable[List[GaussianProcess]]
+            Singleton list or iterator of lists of fitted processes
+    """
+    # define priors
+    prior_list = []
+    for param in [
+        ou_lengthscale_prior,
+        ou_variance_prior,
+        osc_lengthscale_prior,
+        likelihood_variance,
+    ]:
+        if callable(param):
+            prior_list.append([param for _ in range(len(Y))])
+        else:
+            prior_list.append(param)
+
+    ou_osc_priors = [
+        lambda: {
+            "kernel.kernels[0].lengthscales": ou_lengthscale,
+            "kernel.kernels[0].variance": ou_variance,
+            "kernel.kernels[1].lengthscales": osc_lengthscale,
+            "likelihood.variance": likelihood,
+        }
+        for ou_lengthscale, ou_variance, osc_lengthscale, likelihood in zip(*prior_list)
+    ]
+    ou_osc_trainable = {
+        "likelihood.variance": trainable_likelihood_variance,
+        (0, "variance"): ou_trainable_variance,
+        (1, "variance"): osc_trainable_variance,
+    }
+
+    # fit OU_OSC processes
+    return fit_processes(
+        X,
+        Y,
+        [Matern12, Cosine],
+        ou_osc_priors,
+        replicates=K,
+        trainable=ou_osc_trainable,
+    )
+
+
 def load_data(
     path: str, X_name: str, Y_name: str
 ) -> Tuple[
@@ -285,11 +437,19 @@ def load_data(
     """
     Loads experiment data from a csv file. Taking domain name and trace prefix as input.
 
-    :param str path: Path to the csv file.
-    :param str X_name: Name of the domain column.
-    :param str Y_name: Name of the trace column.
+    Parameters
+    ----------
+    path: str
+            Path to the csv file
+    X_name: str
+            Name of the domain column
+    Y_name: str
+            Prefix of the trace columns
 
-    :return: Tuple of domain and trace data.
+    Returns
+    -------
+    Tuple[List[Ndarray], List[Ndarray]]
+            List of domain data, list of trace data
     """
     df = pd.read_csv(path).fillna(0)
 
