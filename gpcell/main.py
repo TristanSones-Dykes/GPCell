@@ -60,8 +60,6 @@ class OscillatorDetector:
         self.X, self.Y = load_data(path, X_name, Y_name)
         self.N, self.M = len(self.Y), len(self.bckgd)
 
-        self.allowed = set(["background", "detrend", "BIC", "LLR", "periods"])
-
     def __str__(self):
         # create a summary of the models and data
         out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
@@ -86,9 +84,6 @@ class OscillatorDetector:
         verbose = kwargs["verbose"]
         plots = set(kwargs["plots"])
 
-        # check if plots are valid and print data
-        if not plots.issubset(self.allowed):
-            raise ValueError(f"Invalid plot type(s) selected: {plots - self.allowed}")
         if verbose:
             print(
                 f"Loaded data with {self.N} cells and {self.M} background noise models"
@@ -103,16 +98,14 @@ class OscillatorDetector:
         )
         self.noise_list = [self.mean_noise / std(y) for y in self.Y]
 
-        if plots and "background" in plots:
-            self.plot("background")
+        self.generate_plot("background")
 
         # --- detrend data --- #
         self.Y_detrended, self.detrend_GPs = detrend(
             self.X, self.Y, 7.0, verbose=verbose
         )
 
-        if plots and "detrend" in plots:
-            self.plot("detrend")
+        self.generate_plot("detrend")
 
         # --- fit OU and OU*Oscillator processes --- #
 
@@ -227,8 +220,7 @@ class OscillatorDetector:
             )
         )
 
-        if plots and "BIC" in plots:
-            self.plot("BIC")
+        self.generate_plot("BIC")
 
         return
         # --- classification using synthetic cells --- #
@@ -325,70 +317,69 @@ class OscillatorDetector:
                 )
             )
 
-        if plots and "periods" in plots:
-            self.plot("periods")
-
-    def plot(self, target: str):
+    def generate_plot(self, target: str):
         """
-        Plot the data
+        Plot the data and save to class fields
 
         Parameters
         ----------
         target : str
             Type of plot to generate
         """
+
+        # Dictionary to hold the plot attributes for the class
+        plot_attributes = {
+            "background": "background_plot",
+            "detrend": "detrend_plot",
+            "BIC": "bic_plot",
+            "LLR": "llr_plot",
+            "periods": "periods_plot",
+        }
+
+        if target not in plot_attributes:
+            raise ValueError(f"Unknown target: {target}")
+
         plot_size = int(15 / 5)
+        fig = None  # Initialize the figure
+
         if target == "background":
-            # square grid of cells
             dim = int(ceil(sqrt(self.M)))
-            plt.figure(figsize=(plot_size * dim, plot_size * dim))
+            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, (x_bckgd, y_bckgd, m) in enumerate(
                 zip(self.X_bckgd, self.bckgd, self.bckgd_GPs)
             ):
-                # evaluate model
                 y_mean, y_var = m(self.X_bckgd[i])
                 deviation = sqrt(m.Y_var) * 2
                 y_bckgd_centred = y_bckgd - mean(y_bckgd)
 
-                # plot
                 plt.subplot(dim, dim, i + 1)
                 plt.plot(x_bckgd, y_mean, zorder=1, c="k", label="Fit GP")
                 plt.plot(x_bckgd, y_bckgd_centred, zorder=0, c="b", label="True Data")
-
-                # plot uncertainty
                 plt.plot(x_bckgd, y_mean + deviation, zorder=1, c="r")
                 plt.plot(x_bckgd, y_mean - deviation, zorder=1, c="r")
-                plt.title(f"Background {i+1}")
+                plt.title(f"Background {i + 1}")
 
         elif target == "detrend":
-            # square grid of cells
             dim = int(ceil(sqrt(self.N)))
-            plt.figure(figsize=(plot_size * dim, plot_size * dim))
+            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, (x, y, y_detrended, m) in enumerate(
                 zip(self.X, self.Y, self.Y_detrended, self.detrend_GPs)
             ):
-                # standardise input, evaluate model
                 y_standardised = (y - mean(y)) / std(y)
                 y_trend = m(x)[0]
 
-                # plot
                 plt.subplot(dim, dim, i + 1)
-                plt.plot(
-                    x,
-                    y_detrended,
-                    label="Detrended",
-                )
+                plt.plot(x, y_detrended, label="Detrended")
                 plt.plot(x, y_standardised, label="True Data")
                 plt.plot(
                     x, y_trend, label="Trend", color="k", alpha=0.5, linestyle="dashed"
                 )
-
-                plt.title(f"Cell {i+1}")
+                plt.title(f"Cell {i + 1}")
 
         elif target == "BIC":
-            plt.figure(figsize=(12 / 2.54, 6 / 2.54))
+            fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
             cutoff = 3
             print(
@@ -397,34 +388,41 @@ class OscillatorDetector:
                 )
             )
 
-            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")  # type: ignore
+            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")
             plt.plot([cutoff, cutoff], [0, 2], "r--", label="Cutoff")
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of experimental cells")
 
         elif target == "LLR":
-            plt.figure(figsize=(20 / 2.54, 10 / 2.54))
+            fig = plt.figure(figsize=(20 / 2.54, 10 / 2.54))
 
             plt.subplot(1, 2, 1)
-            plt.hist(self.LLRs, bins=linspace(0, 40, 40))  # type: ignore
+            plt.hist(self.LLRs, bins=linspace(0, 40, 40))
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of experimental cells")
 
             plt.subplot(1, 2, 2)
-            plt.hist(self.synth_LLRs, bins=linspace(0, 40, 40))  # type: ignore
+            plt.hist(self.synth_LLRs, bins=linspace(0, 40, 40))
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of synthetic non-oscillatory OU cells")
 
         elif target == "periods":
-            plt.figure(figsize=(12 / 2.54, 6 / 2.54))
+            fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
-            plt.hist(self.periods[self.osc_filt], bins=linspace(0, 10, 20))  # type: ignore
+            plt.hist(self.periods[self.osc_filt], bins=linspace(0, 10, 20))
             plt.title("Periods of passing cells")
             plt.xlabel("Period (hours)")
             plt.ylabel("Frequency")
 
         plt.legend()
         plt.tight_layout()
+
+        # Save figure to the corresponding class field
+        field_name = plot_attributes[target]
+        setattr(self, field_name, fig)
+
+        # Close the plot to avoid displaying it immediately
+        plt.close(fig)

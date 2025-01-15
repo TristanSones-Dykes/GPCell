@@ -1,6 +1,5 @@
 # import testing utilities
 import unittest
-from unittest.mock import patch
 
 # import third-party helpers
 import numpy as np
@@ -84,6 +83,8 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         Test the number of cells classified as oscillatory based on BIC.
         """
+        print(self.detector.BIC_diffs)
+
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
         # def test_bootstrap_classification(self):
