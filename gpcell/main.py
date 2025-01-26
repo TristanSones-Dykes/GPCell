@@ -39,6 +39,8 @@ class OscillatorDetector:
         X_name: str,
         background_name: str,
         Y_name: str,
+        *args,
+        **kwargs,
     ):
         """
         Initialize the Oscillator Detector
@@ -60,12 +62,54 @@ class OscillatorDetector:
         self.X, self.Y = load_data(path, X_name, Y_name)
         self.N, self.M = len(self.Y), len(self.bckgd)
 
+        # default arguments
+        default_kwargs = {"verbose": False, "plots": [], "method": "BIC"}
+        for key, value in default_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
+
+        # unpack arguments
+        self.verbose = kwargs["verbose"]
+        self.plots = set(kwargs["plots"])
+
+        if not all(
+            [
+                x in {"background", "detrend", "BIC", "LLR", "periods"}
+                for x in self.plots
+            ]
+        ):
+            raise ValueError("Invalid plot type(s) selected")
+
+        if self.verbose:
+            print(
+                f"Loaded data with {self.N} cells and {self.M} background noise models"
+            )
+            print(f"Plots: {'on' if self.plots else 'off'}")
+            print("\n")
+            print("Fitting background noise...")
+
+        # preprocessing
+        # --- background noise --- #
+        self.mean_noise, self.bckgd_GPs = background_noise(
+            self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
+        )
+        self.noise_list = [self.mean_noise / std(y) for y in self.Y]
+
+        self.generate_plot("background")
+
+        # --- detrend data --- #
+        self.Y_detrended, self.detrend_GPs = detrend(
+            self.X, self.Y, 7.0, verbose=self.verbose
+        )
+
+        self.generate_plot("detrend")
+
     def __str__(self):
         # create a summary of the models and data
         out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
         return out
 
-    def run(self, *args, **kwargs):
+    def run(self, method: str):
         """
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
 
@@ -74,38 +118,8 @@ class OscillatorDetector:
         **kwargs
             Named arguments for the fitting process and administrative options
         """
-        # default arguments
-        default_kwargs = {"verbose": False, "plots": []}
-        for key, value in default_kwargs.items():
-            if key not in kwargs:
-                kwargs[key] = value
-
-        # unpack arguments
-        verbose = kwargs["verbose"]
-        plots = set(kwargs["plots"])
-
-        if verbose:
-            print(
-                f"Loaded data with {self.N} cells and {self.M} background noise models"
-            )
-            print(f"Plots: {'on' if plots else 'off'}")
-            print("\n")
-            print("Fitting background noise...")
-
-        # --- background noise --- #
-        self.mean_noise, self.bckgd_GPs = background_noise(
-            self.X_bckgd, self.bckgd, 7.0, verbose=verbose
-        )
-        self.noise_list = [self.mean_noise / std(y) for y in self.Y]
-
-        self.generate_plot("background")
-
-        # --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(
-            self.X, self.Y, 7.0, verbose=verbose
-        )
-
-        self.generate_plot("detrend")
+        if method not in ["BIC", "bootstrap"]:
+            raise ValueError("Invalid method selected")
 
         # --- fit OU and OU*Oscillator processes --- #
 
@@ -208,8 +222,19 @@ class OscillatorDetector:
 
             return LLRs, BIC_diffs, k_max_ou_list, k_max_ouosc_list, periods
 
-        self.LLRs, self.BIC_diffs, self.k_ou_list, self.k_ouosc_list, self.periods = (
-            fit_ou_ouosc(
+        # --- classify using BIC --- #
+
+        if method == "BIC":
+            if self.verbose:
+                print("Fitting BIC...")
+
+            (
+                self.LLRs,
+                self.BIC_diffs,
+                self.k_ou_list,
+                self.k_ouosc_list,
+                self.periods,
+            ) = fit_ou_ouosc(
                 self.X,
                 self.Y_detrended,
                 ou_priors,
@@ -218,12 +243,18 @@ class OscillatorDetector:
                 ouosc_trainables,
                 10,
             )
-        )
 
-        self.generate_plot("BIC")
+            self.generate_plot("BIC")
+            return
 
-        return
         # --- classification using synthetic cells --- #
+
+        if method != "bootstrap":
+            raise ValueError("Invalid method selected")
+
+        if self.verbose:
+            print("Fitting syntheic cells...")
+
         K = 10
         self.synth_LLRs = []
         detrend_kernels = [GP_d.fit_gp.kernel for GP_d in self.detrend_GPs]
@@ -259,10 +290,12 @@ class OscillatorDetector:
 
             self.synth_LLRs.extend(LLRs)
 
-        if plots and "LLR" in plots:
-            self.plot("LLR")
+        self.generate_plot("LLR")
 
         # --- classification --- #
+
+        if self.verbose:
+            print("Classifying cells...")
 
         LLR_array = array(self.LLRs)
         LLR_synth_array = array(self.synth_LLRs)
@@ -310,7 +343,7 @@ class OscillatorDetector:
         q_vals = q1[argsort(LLR_Idx)]
         self.osc_filt = q_vals < 0.05
 
-        if verbose:
+        if self.verbose:
             print(
                 "Number of cells counted as oscillatory (full method): {0}/{1}".format(
                     sum(self.osc_filt), len(self.osc_filt)
@@ -410,6 +443,9 @@ class OscillatorDetector:
             plt.title("LLRs of synthetic non-oscillatory OU cells")
 
         elif target == "periods":
+            if self.periods is None:
+                raise ValueError("Periods have not been calculated yet")
+
             fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
             plt.hist(self.periods[self.osc_filt], bins=linspace(0, 10, 20))

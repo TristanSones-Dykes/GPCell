@@ -48,7 +48,13 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         Test the run method with an invalid plot type.
         """
         with self.assertRaises(ValueError) as context:
-            self.detector.run(plots=["invalid_plot_type"])
+            gc.OscillatorDetector(
+                path=self.sample_data_path,
+                X_name=self.X_name,
+                background_name=self.background_name,
+                Y_name=self.Y_name,
+                plots=["invalid_plot"],
+            )
         self.assertIn("Invalid plot type(s) selected", str(context.exception))
 
 
@@ -68,8 +74,8 @@ class TestOscillatorDetectorHes(unittest.TestCase):
             X_name=X_name,
             background_name=background_name,
             Y_name=Y_name,
+            verbose=True,
         )
-        cls.detector.run(verbose=True)
 
     def test_background_noise_value(self):
         """
@@ -83,15 +89,19 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         Test the number of cells classified as oscillatory based on BIC.
         """
-        print(self.detector.BIC_diffs)
-
+        self.detector.run(method="BIC")
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
-        # def test_bootstrap_classification(self):
+    def test_bootstrap_classification(self):
         """
         Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
         """
-        # self.assertEqual(sum(self.detector.osc_filt), 10)
+        self.detector.run(method="bootstrap")
+
+        for i, (true, pred) in enumerate(
+            zip([False, True, True, False], self.detector.osc_filt[-4:])
+        ):
+            self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
 
 
 if __name__ == "__main__":
