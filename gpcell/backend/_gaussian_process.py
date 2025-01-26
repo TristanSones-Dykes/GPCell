@@ -2,6 +2,7 @@
 from typing import Optional, Tuple
 
 # Third-Party Library Imports
+import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 import gpflow.optimizers as optimizers
@@ -116,3 +117,45 @@ class GaussianProcess:
                 Log posterior density
         """
         return self.log_posterior_density
+
+    def plot(
+        self,
+        plot_sd: bool = False,
+        new_y: Optional[Ndarray] = None,
+        new_label: str = "Altered data",
+    ):
+        """
+        Plot the Gaussian Process model
+
+        Parameters
+        ----------
+        plot_sd: bool
+                Plot standard deviation
+        new_y: Optional[Ndarray]
+                New target values
+        """
+        if not hasattr(self, "fit_gp"):
+            raise ValueError("Model has not been fit yet.")
+
+        X = self.fit_gp.X_data
+        y = self.fit_gp.Y_data
+        fit_y = self.fit_gp.fused_predict_f(X)[0]
+
+        plt.plot(X, y, label="True data")
+
+        match new_y:
+            case None:
+                plt.plot(X, fit_y, label="Fit process")
+            case _:
+                try:
+                    plt.plot(X, new_y, label=new_label)
+                    plt.plot(
+                        X,
+                        fit_y,
+                        label="Fit process",
+                        color="k",
+                        alpha=0.5,
+                        linestyle="dashed",
+                    )
+                except Exception as e:
+                    print("Problem with new data to plot: ", e)
