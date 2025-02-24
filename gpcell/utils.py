@@ -404,7 +404,8 @@ def gillespie_timing_mod9(
                 m_rep, p_rep = future.result()
                 mout[i, :] = m_rep
                 pout[i, :] = p_rep
-                # print(f"gillespie_timing_mod9: Replicate {i + 1} finished.")
+                # if (i + 1) % 10 == 0:
+                #     print(f"gillespie_timing_mod9: Replicate {i + 1} finished.")
             except Exception as e:
                 print(
                     f"gillespie_timing_mod9: Replicate {i + 1} raised an exception: {e}"
@@ -447,7 +448,8 @@ def gillespie_timing_mod9_nodelay(
                 m_rep, p_rep = future.result()
                 mout[i, :] = m_rep
                 pout[i, :] = p_rep
-                # print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} finished.")
+                # if (i + 1) % 10 == 0:
+                #     print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} finished.")
             except Exception as e:
                 print(
                     f"gillespie_timing_mod9_nodelay: Replicate {i + 1} raised an exception: {e}"
