@@ -57,7 +57,7 @@ def plot_rocs_and_timeseries(
     ax1 = plt.subplot(3, 3, 1)
     ax1.plot(x1, dataNORMED1[:, 0])
     ax1.set_xlim(0, np.max(x1))
-    ax1.set_ylim([-4, 4])
+    ax1.set_ylim([-4, 4])  # type: ignore
     ax1.set_xlabel("Time (hours)")
     ax1.set_ylabel("Normalised expression")
     ax1.text(-15, 1, r"$\sigma_N^{2} = 0.1$", fontsize=10)
@@ -116,7 +116,7 @@ def plot_rocs_and_timeseries(
     ax4 = plt.subplot(3, 3, 4)
     ax4.plot(x2, dataNORMED2[:, 0])
     ax4.set_xlim(0, np.max(x2))
-    ax4.set_ylim([-4, 4])
+    ax4.set_ylim([-4, 4])  # type: ignore
     ax4.set_xlabel("Time (hours)")
     ax4.set_ylabel("Normalised expression")
     ax4.text(-15, 1, r"$\sigma_N^{2} = 0.5$", fontsize=10)
@@ -174,7 +174,7 @@ def plot_rocs_and_timeseries(
     ax7 = plt.subplot(3, 3, 7)
     ax7.plot(x3, dataNORMED3[:, 0])
     ax7.set_xlim(0, np.max(x3))
-    ax7.set_ylim([-4, 4])
+    ax7.set_ylim([-4, 4])  # type: ignore
     ax7.set_xlabel("Time (hours)")
     ax7.set_ylabel("Normalised expression")
     ax7.text(-15 / 2.5, 1, r"$\sigma_N^{2} = 0.1$", fontsize=10)

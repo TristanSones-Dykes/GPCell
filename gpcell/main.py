@@ -6,14 +6,12 @@ import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 from numpy import (
-    arange,
     argmax,
     ceil,
     isnan,
     log,
     concatenate,
     mean,
-    nonzero,
     sqrt,
     std,
     array,
@@ -22,19 +20,18 @@ from numpy import (
     max,
     argsort,
     zeros_like,
-    percentile,
 )
 from numpy.random import uniform, multivariate_normal
 from scipy.signal import find_peaks
 from scipy.interpolate import CubicSpline
 
 from gpflow.kernels import White, Matern12, Cosine, Kernel
-from gpflow.utilities import print_summary
+# from gpflow.utilities import print_summary
 
 # Internal Project Imports
 from gpcell.backend import GaussianProcess
 from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag
-from .utils import load_data, fit_processes, background_noise, detrend, get_time_series
+from .utils import load_data, fit_processes, background_noise, detrend
 
 
 class OscillatorDetector:
@@ -570,7 +567,7 @@ class OscillatorDetector:
 
             fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
-            plt.hist(self.periods[self.osc_filt], bins=linspace(0, 10, 20))
+            plt.hist(self.periods[self.osc_filt], bins=linspace(0, 10, 20))  # type: ignore
             plt.title("Periods of passing cells")
             plt.xlabel("Period (hours)")
             plt.ylabel("Frequency")
