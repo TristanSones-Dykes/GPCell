@@ -5,7 +5,7 @@ from typing import Optional, Tuple
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-import gpflow.optimizers as optimizers
+from gpflow.optimizers import Scipy
 from gpflow.posteriors import PrecomputeCacheType
 
 # Internal Project Imports
@@ -81,8 +81,7 @@ class GaussianProcess:
 
         gp_reg = self.constructor(X, y)
 
-        opt = optimizers.Scipy()
-
+        opt = Scipy()
         opt.minimize(
             gp_reg.training_loss,
             gp_reg.trainable_variables,  # type: ignore
