@@ -13,3 +13,6 @@ dependencies:
   - gpflow
   - tf-keras
   - black
+  - numba
+  - joblib
+  - astropy
