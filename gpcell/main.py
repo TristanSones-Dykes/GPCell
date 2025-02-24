@@ -109,8 +109,7 @@ class OscillatorDetector:
         X_name: str,
         background_name: str,
         Y_name: str,
-        *args,
-        **kwargs,
+        params: dict | None = None,
     ):
         """
         Initialize the Oscillator Detector from a csv file.
@@ -130,13 +129,18 @@ class OscillatorDetector:
         X, Y = load_data(path, X_name, Y_name)
         N = len(Y)
 
-        # use set noise if provided
-        if "set_noise" in kwargs:
-            return cls(X, Y, N, *args, **kwargs)
+        # check for kwargs and use set noise if provided
+        match params:
+            case dict():
+                if "set_noise" in params:
+                    return cls(X, Y, N, **params)
+            case _:
+                params = {}
+
         X_bckgd, bckgd = load_data(path, X_name, background_name)
         M = len(bckgd)
 
-        return cls(X, Y, N, X_bckgd=X_bckgd, bckgd=bckgd, M=M, *args, **kwargs)
+        return cls(X, Y, N, X_bckgd=X_bckgd, bckgd=bckgd, M=M, **params)
 
     def __str__(self):
         # create a summary of the models and data

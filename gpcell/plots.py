@@ -35,7 +35,7 @@ def plot_rocs_and_timeseries(
     TP13: np.ndarray,
     FP23: np.ndarray,
     TP23: np.ndarray,
-    CellNum: int,
+    n_cells: int,
 ) -> None:
     """
     Generates a 3x3 grid of subplots replicating the MATLAB figure.
@@ -95,8 +95,8 @@ def plot_rocs_and_timeseries(
     # Subplot C: Experiment 1 ROC curves.
     ax3 = plt.subplot(3, 3, 3)
     # Plot GP ROC (BIC-based) in red, L-S ROC in blue.
-    ax3.plot(FP11 / CellNum, TP11 / CellNum, color="r", label="GP")
-    ax3.plot(FP21 / CellNum, TP21 / CellNum, color="b", label="L-S")
+    ax3.plot(FP11 / n_cells, TP11 / n_cells, color="r", label="GP")
+    ax3.plot(FP21 / n_cells, TP21 / n_cells, color="b", label="L-S")
     ax3.set_xlabel("1 - Specificity (false positive rate)")
     ax3.set_ylabel("Sensitivity (true positive rate)")
     ax3.legend(loc="lower right")
@@ -153,8 +153,8 @@ def plot_rocs_and_timeseries(
 
     # Subplot F: Experiment 2 ROC curves.
     ax6 = plt.subplot(3, 3, 6)
-    ax6.plot(FP12 / CellNum, TP12 / CellNum, color="r", label="GP")
-    ax6.plot(FP22 / CellNum, TP22 / CellNum, color="b", label="L-S")
+    ax6.plot(FP12 / n_cells, TP12 / n_cells, color="r", label="GP")
+    ax6.plot(FP22 / n_cells, TP22 / n_cells, color="b", label="L-S")
     ax6.set_xlabel("1 - Specificity (false positive rate)")
     ax6.set_ylabel("Sensitivity (true positive rate)")
     ax6.legend(loc="lower right")
@@ -211,8 +211,8 @@ def plot_rocs_and_timeseries(
 
     # Subplot I: Experiment 3 ROC curves.
     ax9 = plt.subplot(3, 3, 9)
-    ax9.plot(FP13 / CellNum, TP13 / CellNum, color="r", label="GP")
-    ax9.plot(FP23 / CellNum, TP23 / CellNum, color="b", label="L-S")
+    ax9.plot(FP13 / n_cells, TP13 / n_cells, color="r", label="GP")
+    ax9.plot(FP23 / n_cells, TP23 / n_cells, color="b", label="L-S")
     ax9.set_xlabel("1 - Specificity (false positive rate)")
     ax9.set_ylabel("Sensitivity (true positive rate)")
     ax9.legend(loc="lower right")
@@ -233,7 +233,7 @@ def plot_rocs_and_timeseries(
 
 
 def compute_rocs_from_file(
-    filename: str, Noise: Numeric, CellNum: int
+    filename: str, noise: Numeric, n_cells: int
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Reads simulated data from a CSV file and computes ROC curves based on
@@ -245,9 +245,9 @@ def compute_rocs_from_file(
     filename : str
         Path to the CSV file containing the simulated data.
         The CSV is assumed to have a "Time" column and columns named "Cell 1", "Cell 2", etc.
-    Noise : float
+    noise : float
         Noise level used in simulation (e.g. np.sqrt(0.1)).
-    CellNum : int
+    n_cells : int
         Number of replicates per condition (the file should have 2*CellNum cell columns).
 
     Returns
@@ -273,7 +273,8 @@ def compute_rocs_from_file(
     n_cells = dataNORMED.shape[1]
 
     # Compute BIC differences using OscillatorDetector.
-    od = OscillatorDetector.from_data(filename, "Time", "", "Cell", set_noise=Noise)
+    params = {"verbose": True, "set_noise": noise}
+    od = OscillatorDetector.from_data(filename, "Time", "", "Cell", **params)
     od.fit("BIC")
     BICdiffM = od.BIC_diffs
     BICdiffTOT = np.array(BICdiffM)
@@ -281,8 +282,8 @@ def compute_rocs_from_file(
     # Split the BIC differences into two groups:
     # First CellNum are one condition (group A, e.g., non-oscillatory)
     # Next CellNum are the other condition (group B, e.g., oscillatory)
-    A = BICdiffTOT[:CellNum]
-    B = BICdiffTOT[CellNum : 2 * CellNum]
+    A = BICdiffTOT[:n_cells]
+    B = BICdiffTOT[n_cells : 2 * n_cells]
 
     # --- ROC using BIC differences ---
     # Sweep through a range of thresholds.
@@ -311,8 +312,8 @@ def compute_rocs_from_file(
             pth = ls.false_alarm_level(Pd)
             beatvec[j] = 1 if np.any(pxx > pth) else 0  # type: ignore
         # Split beat detection results into the two groups.
-        A_beat = beatvec[:CellNum]
-        B_beat = beatvec[CellNum : 2 * CellNum]
+        A_beat = beatvec[:n_cells]
+        B_beat = beatvec[n_cells : 2 * n_cells]
         FP2[i] = np.sum(A_beat)
         TP2[i] = np.sum(B_beat)
 

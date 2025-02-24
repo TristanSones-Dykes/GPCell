@@ -47,13 +47,13 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         """
         Test the run method with an invalid plot type.
         """
+        params = {"plots": ["invalid_plot"]}
         with self.assertRaises(ValueError) as context:
-            gc.OscillatorDetector.from_data(
-                path=self.sample_data_path,
-                X_name=self.X_name,
-                background_name=self.background_name,
-                Y_name=self.Y_name,
-                plots=["invalid_plot"],
+            gc.OscillatorDetector(
+                self.detector.X,
+                self.detector.Y,
+                self.detector.bckgd,
+                params=params,
             )
         self.assertIn("Invalid plot type(s) selected", str(context.exception))
 
@@ -67,6 +67,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         X_name = "Time (h)"
         background_name = "Background"
         Y_name = "Cell"
+        params = {"verbose": True}
 
         # Create OscillatorDetector instance with Hes dataset
         cls.detector = gc.OscillatorDetector.from_data(
@@ -74,7 +75,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
             X_name=X_name,
             background_name=background_name,
             Y_name=Y_name,
-            verbose=True,
+            params=params,
         )
 
     def test_background_noise_value(self):
