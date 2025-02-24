@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Iterable, List, Tuple, cast
+from typing import Iterable, List, Sequence, Tuple, cast
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -26,9 +26,11 @@ from scipy.signal import find_peaks
 from scipy.interpolate import CubicSpline
 
 from gpflow.kernels import White, Matern12, Cosine, Kernel
+from gpflow.utilities import print_summary
 
 # Internal Project Imports
 from gpcell.backend import GaussianProcess
+from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag
 from .utils import load_data, fit_processes, background_noise, detrend
 
 
@@ -95,33 +97,51 @@ class OscillatorDetector:
         )
         self.noise_list = [self.mean_noise / std(y) for y in self.Y]
 
-        self.generate_plot("background")
-
         # --- detrend data --- #
         self.Y_detrended, self.detrend_GPs = detrend(
             self.X, self.Y, 7.0, verbose=self.verbose
         )
 
-        self.generate_plot("detrend")
+        # generate plots
+        pre_plots = {"background", "detrend"}
+        for plot in pre_plots.intersection(self.plots):
+            self.generate_plot(plot)
 
     def __str__(self):
         # create a summary of the models and data
         out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
         return out
 
-    def run(self, method: str):
+    def fit(self, methods: str | List[str] | None = None):
         """
-        Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
+        Extensible fitting method that runs a list of fitting routines in order.
+        The available methods are "BIC" and "BOOTSTRAP". If only a single method (or a list)
+        is provided, the dependency graph is used to ensure that required methods (e.g., BIC for BOOTSTRAP)
+        are run first.
 
         Parameters
         ----------
-        **kwargs
-            Named arguments for the fitting process and administrative options
+        methods : Union[str, List[str]], optional
+            A single fitting method or list of methods to run (default is "BIC").
         """
-        if method not in ["BIC", "bootstrap"]:
-            raise ValueError("Invalid method selected")
+        # Allow methods to be a single string or a list.
+        if methods is None:
+            methods = ["BIC"]
+        elif isinstance(methods, str):
+            methods = [methods]
 
-        # --- fit OU and OU*Oscillator processes --- #
+        # Convert all method names to uppercase.
+        methods = [m.upper() for m in methods]
+
+        # Initialize persistent fit status if not already present.
+        if not hasattr(self, "_fit_status"):
+            self._fit_status = set()
+
+        # Define dependency graph: each key maps to a list of methods that must run first.
+        dependencies = {
+            "BIC": [],
+            "BOOTSTRAP": ["BIC"],
+        }
 
         # define priors
         ou_priors = [
@@ -149,109 +169,82 @@ class OscillatorDetector:
             (1, "variance"): False,
         }
 
-        def fit_ou_ouosc(
-            X, Y, ou_priors, ou_trainables, ouosc_priors, ouosc_trainables, K
-        ) -> Tuple[List[float], List[float], List[Kernel], List[Kernel], List[float]]:
-            ou_kernel = Matern12
-            ouosc_kernel = [Matern12, Cosine]
+        # Recursive helper function to run a method and its dependencies.
+        def run_method(method: str):
+            if method not in dependencies:
+                raise ValueError(f"Unknown fitting method: {method}")
+            # Run all dependencies first.
+            for dep in dependencies[method]:
+                if dep not in self._fit_status:
+                    run_method(dep)
+            # Now run the method if it hasn't been run yet.
+            if method not in self._fit_status:
+                if method == "BIC":
+                    self._fit_BIC(
+                        ou_priors,
+                        ou_trainables,
+                        ouosc_priors,
+                        ouosc_trainables,
+                    )
+                elif method == "BOOTSTRAP":
+                    self._fit_bootstrap(
+                        ou_priors,
+                        ou_trainables,
+                        ouosc_priors,
+                        ouosc_trainables,
+                    )
+                # Mark this method as completed.
+                self._fit_status.add(method)
 
-            # fit processes
-            ou_GPs = cast(
-                Iterable[List[GaussianProcess]],
-                fit_processes(
-                    X,
-                    Y,
-                    ou_kernel,
-                    ou_priors,
-                    replicates=K,
-                    trainable=ou_trainables,
-                ),
-            )
-            ouosc_GPs = cast(
-                Iterable[List[GaussianProcess]],
-                fit_processes(
-                    X,
-                    Y,
-                    ouosc_kernel,
-                    ouosc_priors,
-                    replicates=K,
-                    trainable=ouosc_trainables,
-                ),
-            )
+        # Run each requested method (which will trigger dependencies as needed).
+        for method in methods:
+            run_method(method)
 
-            # calculate LLR and BIC
-            LLRs = []
-            BIC_diffs = []
-            k_max_ou_list = []
-            k_max_ouosc_list = []
-            periods = []
-
-            for i, (x, y, ou, ouosc) in enumerate(
-                zip(self.X, self.Y_detrended, ou_GPs, ouosc_GPs)
-            ):
-                ou_LL = [gp.log_posterior() for gp in ou]
-                ouosc_LL = [gp.log_posterior() for gp in ouosc]
-
-                # take process with highest posterior density
-                max_ou_ll = max(ou_LL)
-                max_ouosc_ll = max(ouosc_LL)
-                k_max_ou = ou[argmax(ou_LL)].fit_gp.kernel
-                k_max_ouosc = ouosc[argmax(ouosc_LL)].fit_gp.kernel
-                k_ouosc = ouosc[0].fit_gp.kernel
-
-                # calculate LLR and BIC
-                LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
-                BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
-                BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
-                BIC_diff = BIC_OU - BIC_OUosc
-
-                # calculate period
-                cov_ou_osc = k_ouosc(x).numpy()[0, :]  # type: ignore
-                peaks, _ = find_peaks(cov_ou_osc, height=0)
-
-                if len(peaks) != 0:
-                    period = x[peaks[0]]
-                else:
-                    period = 0
-
-                LLRs.append(LLR)
-                BIC_diffs.append(BIC_diff)
-                k_max_ou_list.append(k_max_ou)
-                k_max_ouosc_list.append(k_max_ouosc)
-                periods.append(period)
-
-            return LLRs, BIC_diffs, k_max_ou_list, k_max_ouosc_list, periods
-
+    def _fit_BIC(
+        self,
+        ou_priors: GPPriorFactory | Sequence[GPPriorFactory],
+        ou_trainables: GPPriorTrainingFlag,
+        ouosc_priors: GPPriorFactory | Sequence[GPPriorFactory],
+        ouosc_trainables: GPPriorTrainingFlag,
+    ):
+        """
+        Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
+        """
         # --- classify using BIC --- #
 
-        if method == "BIC":
-            if self.verbose:
-                print("Fitting BIC...")
+        if self.verbose:
+            print("Fitting BIC...")
 
-            (
-                self.LLRs,
-                self.BIC_diffs,
-                self.k_ou_list,
-                self.k_ouosc_list,
-                self.periods,
-            ) = fit_ou_ouosc(
-                self.X,
-                self.Y_detrended,
-                ou_priors,
-                ou_trainables,
-                ouosc_priors,
-                ouosc_trainables,
-                10,
-            )
+        (
+            self.LLRs,
+            self.BIC_diffs,
+            self.k_ou_list,
+            self.k_ouosc_list,
+            self.periods,
+        ) = self._fit_ou_ouosc(
+            self.X,
+            self.Y_detrended,
+            ou_priors,
+            ou_trainables,
+            ouosc_priors,
+            ouosc_trainables,
+            10,
+        )
 
+        # generate plot
+        if "BIC" in self.plots:
             self.generate_plot("BIC")
-            return
 
+        return
+
+    def _fit_bootstrap(
+        self,
+        ou_priors: Sequence[GPPriorFactory],
+        ou_trainables: GPPriorTrainingFlag,
+        ouosc_priors: Sequence[GPPriorFactory],
+        ouosc_trainables: GPPriorTrainingFlag,
+    ):
         # --- classification using synthetic cells --- #
-
-        if method != "bootstrap":
-            raise ValueError("Invalid method selected")
-
         if self.verbose:
             print("Fitting syntheic cells...")
 
@@ -278,7 +271,7 @@ class OscillatorDetector:
             synths_detrended, _ = detrend([X for _ in range(K)], synths, 7.0)
 
             # fit OU and OU+Oscillator models
-            LLRs, _, _, _, _ = fit_ou_ouosc(
+            LLRs, _, _, _, _ = self._fit_ou_ouosc(
                 [X for _ in range(K)],
                 synths_detrended,
                 ou_priors[i],
@@ -349,6 +342,85 @@ class OscillatorDetector:
                     sum(self.osc_filt), len(self.osc_filt)
                 )
             )
+
+        # generate plots
+        if "LLR" in self.plots:
+            self.generate_plot("LLR")
+        if "periods" in self.plots:
+            self.generate_plot("periods")
+
+    def _fit_ou_ouosc(
+        self, X, Y, ou_priors, ou_trainables, ouosc_priors, ouosc_trainables, K
+    ) -> Tuple[List[float], List[float], List[Kernel], List[Kernel], List[float]]:
+        ou_kernel = Matern12
+        ouosc_kernel = [Matern12, Cosine]
+
+        # fit processes
+        ou_GPs = cast(
+            Iterable[List[GaussianProcess]],
+            fit_processes(
+                X,
+                Y,
+                ou_kernel,
+                ou_priors,
+                replicates=K,
+                trainable=ou_trainables,
+            ),
+        )
+        ouosc_GPs = cast(
+            Iterable[List[GaussianProcess]],
+            fit_processes(
+                X,
+                Y,
+                ouosc_kernel,
+                ouosc_priors,
+                replicates=K,
+                trainable=ouosc_trainables,
+            ),
+        )
+
+        # calculate LLR and BIC
+        LLRs = []
+        BIC_diffs = []
+        k_max_ou_list = []
+        k_max_ouosc_list = []
+        periods = []
+
+        for i, (x, y, ou, ouosc) in enumerate(zip(X, Y, ou_GPs, ouosc_GPs)):
+            ou_LL = [gp.log_posterior() for gp in ou]
+            ouosc_LL = [gp.log_posterior() for gp in ouosc]
+
+            # take process with highest posterior density
+            max_ou_ll = max(ou_LL)
+            max_ouosc_ll = max(ouosc_LL)
+            k_max_ou = ou[argmax(ou_LL)].fit_gp.kernel
+            k_max_ouosc = ouosc[argmax(ouosc_LL)].fit_gp.kernel
+            k_ouosc = ouosc[0].fit_gp.kernel
+
+            # print_summary(ouosc[argmax(ouosc_LL)].fit_gp, fmt="notebook")
+
+            # calculate LLR and BIC
+            LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
+            BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
+            BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
+            BIC_diff = BIC_OU - BIC_OUosc
+
+            # calculate period
+            cov_ou_osc = k_ouosc(x).numpy()[0, :]  # type: ignore
+            peaks, _ = find_peaks(cov_ou_osc, height=0)
+
+            if len(peaks) != 0:
+                period = x[peaks[0]]
+            else:
+                period = 0
+
+            LLRs.append(LLR)
+            BIC_diffs.append(BIC_diff)
+            k_max_ou_list.append(k_max_ou)
+            k_max_ouosc_list.append(k_max_ouosc)
+            periods.append(period)
+
+        return LLRs, BIC_diffs, k_max_ou_list, k_max_ouosc_list, periods
 
     def generate_plot(self, target: str):
         """
