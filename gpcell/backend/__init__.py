@@ -10,6 +10,7 @@ from ._types import (
 )
 from ._gpr_constructor import GPRConstructor
 from ._gaussian_process import GaussianProcess
+from ._utils import _simulate_replicate_mod9, _simulate_replicate_mod9_nodelay
 
 __all__ = [
     "Ndarray",
@@ -21,4 +22,6 @@ __all__ = [
     "GPPrior",
     "GPRConstructor",
     "GaussianProcess",
+    "_simulate_replicate_mod9",
+    "_simulate_replicate_mod9_nodelay",
 ]
