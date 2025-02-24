@@ -370,11 +370,11 @@ def save_sim(X: Sequence[Ndarray], Y: Sequence[Ndarray], filename: str) -> None:
 
 def gillespie_timing_mod9(
     N: int,
-    par: Sequence[int | float],
+    par: np.ndarray,
     n_cells: int,
     mstart: int,
     pstart: int,
-    out_names: List[float],
+    out_names: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Runs Gillespie algorithm with delay processes in parallel.
@@ -404,7 +404,7 @@ def gillespie_timing_mod9(
                 m_rep, p_rep = future.result()
                 mout[i, :] = m_rep
                 pout[i, :] = p_rep
-                print(f"gillespie_timing_mod9: Replicate {i + 1} finished.")
+                # print(f"gillespie_timing_mod9: Replicate {i + 1} finished.")
             except Exception as e:
                 print(
                     f"gillespie_timing_mod9: Replicate {i + 1} raised an exception: {e}"
@@ -415,11 +415,11 @@ def gillespie_timing_mod9(
 
 def gillespie_timing_mod9_nodelay(
     N: int,
-    par: Sequence[int | float],
+    par: np.ndarray,
     totalreps: int,
     mstart: int,
     pstart: int,
-    out_times: List[float],
+    out_times: np.ndarray,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Runs Gillespie algorithm without delay processes in parallel.
@@ -447,7 +447,7 @@ def gillespie_timing_mod9_nodelay(
                 m_rep, p_rep = future.result()
                 mout[i, :] = m_rep
                 pout[i, :] = p_rep
-                print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} finished.")
+                # print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} finished.")
             except Exception as e:
                 print(
                     f"gillespie_timing_mod9_nodelay: Replicate {i + 1} raised an exception: {e}"
@@ -457,8 +457,8 @@ def gillespie_timing_mod9_nodelay(
 
 
 def get_time_series(
-    par1: Sequence[int | float],
-    par2: Sequence[int | float],
+    par1: np.ndarray,
+    par2: np.ndarray,
     t_final: float,
     noise: float,
     n_cells: int,
@@ -495,11 +495,9 @@ def get_time_series(
 
     # Run the simulations in parallel.
     mout1, pout1 = gillespie_timing_mod9_nodelay(
-        N, par1, n_cells, mstart, pstart, out_times.tolist()
+        N, par1, n_cells, mstart, pstart, out_times
     )
-    mout2, pout2 = gillespie_timing_mod9(
-        N, par2, n_cells, mstart, pstart, out_times.tolist()
-    )
+    mout2, pout2 = gillespie_timing_mod9(N, par2, n_cells, mstart, pstart, out_times)
 
     # In MATLAB, x = Output_Times' and then x = (x-5000)/60.
     x = (out_times.astype(float) - 5000) / 60.0
