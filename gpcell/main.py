@@ -584,22 +584,3 @@ class OscillatorDetector:
 
         # Close the plot to avoid displaying it immediately
         plt.close(fig)
-
-
-def figS5():
-    """
-    Recreates the MATLAB FigS5.m script in Python.
-
-    This function sets simulation parameters, generates time series data,
-    fits OU/OUosc models to each cell's time series, performs a bootstrap
-    analysis, and then produces three subplots: histograms of LLRs and a QQ plot.
-    """
-    # --- Set parameters (as in FigS5.m) ---
-    par1 = array([300, 1, 0.07, 0.07, 1, 1, 0])
-    par2 = array([100, 3, 0.03, 0.03, 1, 1, 18])
-    Tfinal = 1500  # 25 hours in MATLAB units
-    Noise1 = sqrt(0.1)
-    CellNum = 1000  # total replicates used in the simulation
-
-    # Get time series data (x in minutes, dataNORMED contains the noisy outputs)
-    x, dataNORMED = get_time_series(par1, par2, Tfinal, Noise1, CellNum)

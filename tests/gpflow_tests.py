@@ -20,7 +20,7 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         self.Y_name = "Cell"
 
         # Create OscillatorDetector instance
-        self.detector = gc.OscillatorDetector(
+        self.detector = gc.OscillatorDetector.from_data(
             path=self.sample_data_path,
             X_name=self.X_name,
             background_name=self.background_name,
@@ -48,7 +48,7 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         Test the run method with an invalid plot type.
         """
         with self.assertRaises(ValueError) as context:
-            gc.OscillatorDetector(
+            gc.OscillatorDetector.from_data(
                 path=self.sample_data_path,
                 X_name=self.X_name,
                 background_name=self.background_name,
@@ -69,7 +69,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         Y_name = "Cell"
 
         # Create OscillatorDetector instance with Hes dataset
-        cls.detector = gc.OscillatorDetector(
+        cls.detector = gc.OscillatorDetector.from_data(
             path=path,
             X_name=X_name,
             background_name=background_name,
@@ -89,14 +89,14 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         Test the number of cells classified as oscillatory based on BIC.
         """
-        self.detector.run(method="BIC")
+        self.detector.fit(methods="BIC")
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
     def test_bootstrap_classification(self):
         """
         Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
         """
-        self.detector.run(method="bootstrap")
+        self.detector.fit(methods="bootstrap")
 
         for i, (true, pred) in enumerate(
             zip([False, True, True, False], self.detector.osc_filt[-4:])
