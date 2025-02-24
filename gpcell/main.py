@@ -111,11 +111,11 @@ class OscillatorDetector:
 
             print(f"Plots: {'on' if self.plots else 'off'}")
             print("\n")
-            print("Fitting background noise...")
 
         # preprocessing
         # --- background noise --- #
         if self.set_noise is None:
+            print("Fitting background noise...")
             self.mean_noise, self.bckgd_GPs = background_noise(
                 self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
             )
