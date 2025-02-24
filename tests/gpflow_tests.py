@@ -49,10 +49,11 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         """
         params = {"plots": ["invalid_plot"]}
         with self.assertRaises(ValueError) as context:
-            gc.OscillatorDetector(
-                self.detector.X,
-                self.detector.Y,
-                self.detector.bckgd,
+            gc.OscillatorDetector.from_data(
+                path=self.sample_data_path,
+                X_name=self.X_name,
+                background_name=self.background_name,
+                Y_name=self.Y_name,
                 params=params,
             )
         self.assertIn("Invalid plot type(s) selected", str(context.exception))
