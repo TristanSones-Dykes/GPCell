@@ -6,7 +6,6 @@ import time
 
 # Third-Party Library Imports
 import numpy as np
-import tensorflow as tf
 
 # Direct Namespace Imports
 from numpy import std, mean
@@ -190,7 +189,6 @@ if __name__ == "__main__":
         replicates=replicates,
     )
     end_parallel = time.perf_counter()
-    print(f"Parallel fitting time: {end_parallel - start_parallel:.2f} seconds")
 
     # --- Time the sequential strategy --- #
     start_seq = time.perf_counter()
@@ -219,7 +217,6 @@ if __name__ == "__main__":
         )
     )
     end_seq = time.perf_counter()
-    print(f"Sequential fitting time: {end_seq - start_seq:.2f} seconds")
 
     # --- Print summary --- #
     # parallel
@@ -239,3 +236,7 @@ if __name__ == "__main__":
     print_summary(best_ouosc_seq.fit_gp)
     print_summary(best_ou_seq.fit_gp)
     print("")
+
+    # --- Compare times --- #
+    print(f"Sequential fitting time: {end_seq - start_seq:.2f} seconds")
+    print(f"Parallel fitting time: {end_parallel - start_parallel:.2f} seconds")
