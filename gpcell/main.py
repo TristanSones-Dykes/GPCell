@@ -139,8 +139,9 @@ class OscillatorDetector:
 
         X_bckgd, bckgd = load_data(path, X_name, background_name)
         M = len(bckgd)
+        params["X_bckgd"], params["bckgd"], params["M"] = X_bckgd, bckgd, M
 
-        return cls(X, Y, N, X_bckgd=X_bckgd, bckgd=bckgd, M=M, **params)
+        return cls(X, Y, N, **params)
 
     def __str__(self):
         # create a summary of the models and data

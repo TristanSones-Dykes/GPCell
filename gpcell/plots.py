@@ -274,7 +274,7 @@ def compute_rocs_from_file(
 
     # Compute BIC differences using OscillatorDetector.
     params = {"verbose": True, "set_noise": noise}
-    od = OscillatorDetector.from_data(filename, "Time", "", "Cell", **params)
+    od = OscillatorDetector.from_data(filename, "Time", "", "Cell", params=params)
     od.fit("BIC")
     BICdiffM = od.BIC_diffs
     BICdiffTOT = np.array(BICdiffM)
