@@ -6,7 +6,8 @@ import operator
 # Third-Party Library Imports
 
 # Direct Namespace Imports
-from gpflow.models import GPR
+from gpflow.models import GPR, GPMC
+from gpflow.likelihoods import Gaussian
 from gpflow.utilities import set_trainable
 
 # Internal Project Imports
@@ -54,10 +55,18 @@ class GPRConstructor:
         self.prior_gen = prior_gen
         self.trainable = trainable
 
-    def __call__(self, X: Ndarray, y: Ndarray) -> GPR:
+    def __call__(self, X: Ndarray, y: Ndarray, MCMC: bool = False) -> GPR | GPMC:
         # create new kernel and define model
         kernel = self.kernel()
-        model = GPR((X, y), kernel)
+
+        match MCMC:
+            case True:
+                likelihood = Gaussian()
+                model = GPMC((X, y), kernel, likelihood)
+            case False:
+                model = GPR((X, y), kernel)
+            case _:
+                raise ValueError("Invalid MCMC value")
 
         # assign priors
         prior_dict = self.prior_gen()

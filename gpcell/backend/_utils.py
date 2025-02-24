@@ -2,9 +2,10 @@
 from typing import Mapping
 
 # Third-Party Library Imports
-from tensorflow import Module
+import tensorflow_probability as tfp
 
 # Direct Namespace Imports
+from tensorflow import Module
 from gpflow import Parameter
 
 # Internal Project Imports
@@ -56,6 +57,8 @@ def _set_parameter_by_key(module: Module, key: str, value: GPPrior):
     # Finally, set the parameter
     match value:
         case Parameter():
+            setattr(target, parts[-1], value)
+        case tfp.distributions.Uniform():
             setattr(target, parts[-1], value)
         case _:
             getattr(target, parts[-1]).assign(value)
