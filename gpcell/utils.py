@@ -13,6 +13,7 @@ import operator
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Third-Party Library Imports
+from joblib import Parallel, delayed
 import numpy as np
 import pandas as pd
 import tensorflow_probability as tfp
@@ -169,6 +170,97 @@ def fit_processes(
             return iterate_processes()
         case _:
             raise ValueError(f"Invalid number of replicates: {replicates}")
+
+
+def fit_processes_joblib(
+    X: Sequence[Ndarray],
+    Y: Sequence[Ndarray],
+    kernels: GPKernel,
+    prior_gen: Union[GPPriorFactory, Sequence[GPPriorFactory]],
+    replicates: int = 1,
+    trainable: GPPriorTrainingFlag = {},
+    operator: Optional[GPOperator] = operator.mul,
+    preprocess: int = 0,
+    Y_var: bool = False,
+    verbose: bool = False,
+) -> List[List[GaussianProcess]]:
+    """
+    Fit Gaussian Processes to the data in parallel using Joblib.
+
+    N traces and M replicates will result in N * M models.
+    This version groups the replicates by cell: each job fits all replicates for one cell,
+    thereby reducing data copying overhead.
+
+    Parameters
+    ----------
+    X : Sequence[Ndarray]
+        List of input domains (one per cell).
+    Y : Sequence[Ndarray]
+        List of input traces (one per cell).
+    kernels : GPKernel
+        Kernel (or list of kernels) for the GP model.
+    prior_gen : GPPriorFactory or Sequence[GPPriorFactory]
+        A callable (or list of callables) that generate the priors for each model.
+    replicates : int, optional
+        Number of replicates to fit per cell (default is 1).
+    trainable : GPPriorTrainingFlag, optional
+        Dictionary to set which parameters are trainable (default is {}).
+    operator : Optional[GPOperator], optional
+        Operator to combine kernels (defaults to multiplication if not provided).
+    preprocess : int, optional
+        0: no preprocessing; 1: centre the trace; 2: standardise the trace (default is 0).
+    Y_var : bool, optional
+        Whether to calculate variance of missing data (default is False).
+    verbose : bool, optional
+        If True, prints information during fitting (default is False).
+
+    Returns
+    -------
+    List[List[GaussianProcess]]
+        A list (one per cell) of lists of fitted GP models (one per replicate).
+    """
+    # Determine the constructors for each trace.
+    if callable(prior_gen):
+        constructors = [
+            GPRConstructor(kernels, prior_gen, trainable, operator) for _ in Y
+        ]
+    else:
+        if len(prior_gen) != len(Y):
+            raise ValueError(
+                f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
+            )
+        constructors = [
+            GPRConstructor(kernels, gen, trainable, operator) for gen in prior_gen
+        ]
+
+    # Preprocess traces as requested.
+    if preprocess == 0:
+        Y_processed = Y
+    elif preprocess == 1:
+        Y_processed = [y - mean(y) for y in Y]
+    elif preprocess == 2:
+        Y_processed = [(y - mean(y)) / std(y) for y in Y]
+    else:
+        Y_processed = Y
+
+    # Define a worker function for a single trace.
+    def joblib_fit_trace_worker(
+        index: int, constructor: GPRConstructor
+    ) -> List[GaussianProcess]:
+        x = X[index]
+        y = Y_processed[index]
+        models = []
+        for _ in range(replicates):
+            gp_model = GaussianProcess(constructor)
+            gp_model.fit(x, y, Y_var, verbose)
+            models.append(gp_model)
+        return models
+
+    # Run the worker function in parallel using Joblib.
+    results: List[List[GaussianProcess]] = Parallel(n_jobs=-1, backend="loky")(
+        delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y))
+    )  # type: ignore
+    return results
 
 
 def detrend(

@@ -106,5 +106,53 @@ class TestOscillatorDetectorHes(unittest.TestCase):
             self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
 
 
+# for joblib multiprocessing
+class TestOscillatorDetectorJoblib(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+
+        path = "data/hes/Hes1_example.csv"
+        X_name = "Time (h)"
+        background_name = "Background"
+        Y_name = "Cell"
+        params = {"verbose": True, "joblib": True}
+
+        # Create OscillatorDetector instance with Hes dataset
+        cls.detector = gc.OscillatorDetector.from_data(
+            path=path,
+            X_name=X_name,
+            background_name=background_name,
+            Y_name=Y_name,
+            params=params,
+        )
+
+    def test_background_noise_value(self):
+        """
+        Test the background noise value calculation with real data.
+        """
+        self.assertIsNotNone(self.detector.mean_noise)
+        self.assertGreater(self.detector.mean_noise, 0)
+        self.assertAlmostEqual(float(self.detector.mean_noise), 7.239964458255131)
+
+    def test_BIC_classification(self):
+        """
+        Test the number of cells classified as oscillatory based on BIC.
+        """
+        self.detector.fit(methods="BIC")
+        self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
+
+    def test_bootstrap_classification(self):
+        """
+        Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
+        """
+        self.detector.fit(methods="bootstrap")
+
+        for i, (true, pred) in enumerate(
+            zip([False, True, True, False], self.detector.osc_filt[-4:])
+        ):
+            self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
+
+
 if __name__ == "__main__":
     unittest.main()

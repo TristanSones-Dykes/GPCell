@@ -150,7 +150,7 @@ def joblib_fit_models(
         )
         for i in range(len(Y))
     )
-    return results
+    return results  # type: ignore
 
 
 # -----------------------#
