@@ -6,12 +6,14 @@ import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 from numpy import (
+    arange,
     argmax,
     ceil,
     isnan,
     log,
     concatenate,
     mean,
+    nonzero,
     sqrt,
     std,
     array,
@@ -20,6 +22,7 @@ from numpy import (
     max,
     argsort,
     zeros_like,
+    percentile,
 )
 from numpy.random import uniform, multivariate_normal
 from scipy.signal import find_peaks
@@ -31,12 +34,80 @@ from gpflow.utilities import print_summary
 # Internal Project Imports
 from gpcell.backend import GaussianProcess
 from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag
-from .utils import load_data, fit_processes, background_noise, detrend
+from .utils import load_data, fit_processes, background_noise, detrend, get_time_series
 
 
 class OscillatorDetector:
-    def __init__(
-        self,
+    def __init__(self, X, Y, N, *args, **kwargs):
+        # default arguments
+        default_kwargs = {
+            "verbose": False,
+            "plots": [],
+            "set_noise": None,
+        }
+        for key, value in default_kwargs.items():
+            if key not in kwargs:
+                kwargs[key] = value
+
+        # unpack arguments
+        self.verbose = kwargs["verbose"]
+        self.plots = set(kwargs["plots"])
+        self.set_noise = kwargs["set_noise"]
+
+        # validate arguments
+        if not all(
+            [
+                x in {"background", "detrend", "BIC", "LLR", "periods"}
+                for x in self.plots
+            ]
+        ):
+            raise ValueError("Invalid plot type(s) selected")
+
+        # store data
+        self.X = X
+        self.Y = Y
+        self.N = N
+
+        if self.set_noise is None:
+            self.X_bckgd = kwargs["X_bckgd"]
+            self.bckgd = kwargs["bckgd"]
+            self.M = kwargs["M"]
+
+        if self.verbose:
+            if self.set_noise is None:
+                print(
+                    f"Loaded data with {self.N} cells and {self.M} background noise models"
+                )
+            else:
+                print(f"Loaded data with {self.N} cells, noise set to {self.set_noise}")
+
+            print(f"Plots: {'on' if self.plots else 'off'}")
+            print("\n")
+            print("Fitting background noise...")
+
+        # preprocessing
+        # --- background noise --- #
+        if self.set_noise is None:
+            self.mean_noise, self.bckgd_GPs = background_noise(
+                self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
+            )
+            self.noise_list = [self.mean_noise / std(y) for y in self.Y]
+        else:
+            self.noise_list = [self.set_noise for _ in range(self.N)]
+
+        # --- detrend data --- #
+        self.Y_detrended, self.detrend_GPs = detrend(
+            self.X, self.Y, 7.0, verbose=self.verbose
+        )
+
+        # generate plots
+        pre_plots = {"background", "detrend"}
+        for plot in pre_plots.intersection(self.plots):
+            self.generate_plot(plot)
+
+    @classmethod
+    def from_data(
+        cls,
         path: str,
         X_name: str,
         background_name: str,
@@ -45,8 +116,7 @@ class OscillatorDetector:
         **kwargs,
     ):
         """
-        Initialize the Oscillator Detector
-        If a path is provided, load data from the csv file
+        Initialize the Oscillator Detector from a csv file.
 
         Parameters
         ----------
@@ -60,59 +130,23 @@ class OscillatorDetector:
             Name of the column containing the cell traces
         """
         # load data
-        self.X_bckgd, self.bckgd = load_data(path, X_name, background_name)
-        self.X, self.Y = load_data(path, X_name, Y_name)
-        self.N, self.M = len(self.Y), len(self.bckgd)
+        X, Y = load_data(path, X_name, Y_name)
+        N = len(Y)
 
-        # default arguments
-        default_kwargs = {"verbose": False, "plots": [], "method": "BIC"}
-        for key, value in default_kwargs.items():
-            if key not in kwargs:
-                kwargs[key] = value
+        # use set noise if provided
+        if "set_noise" in kwargs:
+            return cls(X, Y, N, *args, **kwargs)
+        X_bckgd, bckgd = load_data(path, X_name, background_name)
+        M = len(bckgd)
 
-        # unpack arguments
-        self.verbose = kwargs["verbose"]
-        self.plots = set(kwargs["plots"])
-
-        if not all(
-            [
-                x in {"background", "detrend", "BIC", "LLR", "periods"}
-                for x in self.plots
-            ]
-        ):
-            raise ValueError("Invalid plot type(s) selected")
-
-        if self.verbose:
-            print(
-                f"Loaded data with {self.N} cells and {self.M} background noise models"
-            )
-            print(f"Plots: {'on' if self.plots else 'off'}")
-            print("\n")
-            print("Fitting background noise...")
-
-        # preprocessing
-        # --- background noise --- #
-        self.mean_noise, self.bckgd_GPs = background_noise(
-            self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
-        )
-        self.noise_list = [self.mean_noise / std(y) for y in self.Y]
-
-        # --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(
-            self.X, self.Y, 7.0, verbose=self.verbose
-        )
-
-        # generate plots
-        pre_plots = {"background", "detrend"}
-        for plot in pre_plots.intersection(self.plots):
-            self.generate_plot(plot)
+        return cls(X, Y, N, X_bckgd=X_bckgd, bckgd=bckgd, M=M, *args, **kwargs)
 
     def __str__(self):
         # create a summary of the models and data
         out = f"Oscillator Detector with {self.N} cells and {self.M} background noise models\n"
         return out
 
-    def fit(self, methods: str | List[str] | None = None):
+    def fit(self, methods: str | List[str] | None = None, *args, **kwargs):
         """
         Extensible fitting method that runs a list of fitting routines in order.
         The available methods are "BIC" and "BOOTSTRAP". If only a single method (or a list)
@@ -123,6 +157,8 @@ class OscillatorDetector:
         ----------
         methods : Union[str, List[str]], optional
             A single fitting method or list of methods to run (default is "BIC").
+        kwargs : dict
+            Additional keyword arguments to pass to the fitting
         """
         # Allow methods to be a single string or a list.
         if methods is None:
@@ -185,6 +221,7 @@ class OscillatorDetector:
                         ou_trainables,
                         ouosc_priors,
                         ouosc_trainables,
+                        **kwargs,
                     )
                 elif method == "BOOTSTRAP":
                     self._fit_bootstrap(
@@ -192,6 +229,7 @@ class OscillatorDetector:
                         ou_trainables,
                         ouosc_priors,
                         ouosc_trainables,
+                        **kwargs,
                     )
                 # Mark this method as completed.
                 self._fit_status.add(method)
@@ -206,6 +244,8 @@ class OscillatorDetector:
         ou_trainables: GPPriorTrainingFlag,
         ouosc_priors: GPPriorFactory | Sequence[GPPriorFactory],
         ouosc_trainables: GPPriorTrainingFlag,
+        *args,
+        **kwargs,
     ):
         """
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
@@ -243,10 +283,15 @@ class OscillatorDetector:
         ou_trainables: GPPriorTrainingFlag,
         ouosc_priors: Sequence[GPPriorFactory],
         ouosc_trainables: GPPriorTrainingFlag,
+        *args,
+        **kwargs,
     ):
         # --- classification using synthetic cells --- #
         if self.verbose:
             print("Fitting syntheic cells...")
+
+        # extract kwargs
+        set_noise = kwargs.get("set_noise", None)
 
         K = 10
         self.synth_LLRs = []
@@ -255,7 +300,12 @@ class OscillatorDetector:
         # for each cell, make K synthetic cells
         for i in range(self.N):
             X = self.X[i]
-            noise = self.noise_list[i]
+
+            # set noise for automated testing
+            if set_noise is not None:
+                noise = set_noise
+            else:
+                noise = self.noise_list[i]
 
             # configure synthetic cell kernel
             k_se = detrend_kernels[i]
@@ -534,3 +584,22 @@ class OscillatorDetector:
 
         # Close the plot to avoid displaying it immediately
         plt.close(fig)
+
+
+def figS5():
+    """
+    Recreates the MATLAB FigS5.m script in Python.
+
+    This function sets simulation parameters, generates time series data,
+    fits OU/OUosc models to each cell's time series, performs a bootstrap
+    analysis, and then produces three subplots: histograms of LLRs and a QQ plot.
+    """
+    # --- Set parameters (as in FigS5.m) ---
+    par1 = array([300, 1, 0.07, 0.07, 1, 1, 0])
+    par2 = array([100, 3, 0.03, 0.03, 1, 1, 18])
+    Tfinal = 1500  # 25 hours in MATLAB units
+    Noise1 = sqrt(0.1)
+    CellNum = 1000  # total replicates used in the simulation
+
+    # Get time series data (x in minutes, dataNORMED contains the noisy outputs)
+    x, dataNORMED = get_time_series(par1, par2, Tfinal, Noise1, CellNum)
