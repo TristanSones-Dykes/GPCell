@@ -11,14 +11,16 @@ from typing import (
 )
 import operator
 from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
 
 # Third-Party Library Imports
+from joblib import Parallel, delayed, dump, load
 import numpy as np
 import pandas as pd
 import tensorflow_probability as tfp
 
 # Direct Namespace Imports
-from numpy import float64, nonzero, std, mean, max
+from numpy import float64, ndarray, nonzero, std, mean, max
 from gpflow import Parameter
 from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
@@ -169,6 +171,162 @@ def fit_processes(
             return iterate_processes()
         case _:
             raise ValueError(f"Invalid number of replicates: {replicates}")
+
+
+def joblib_fit_memmap_worker(
+    i: int,
+    X: Sequence[Ndarray],
+    Y: ndarray,
+    Y_var: bool,
+    constuctor: GPRConstructor,
+    replicates: int,
+) -> List[GaussianProcess]:
+    """
+    Worker function for fitting Gaussian Processes using Joblib with memory-mapped data.
+
+    Parameters
+    ----------
+    i : int
+        Index of the trace to fit.
+    X : Sequence[Ndarray]
+        List of input domains.
+    Y : ndarray
+        Memory-mapped array of input traces.
+    Y_var : bool
+        Whether to calculate variance of missing data.
+    constructor : GPRConstructor
+        Constructor for the GP model.
+    replicates : int
+        Number of replicates to fit.
+
+    Returns
+    -------
+    List[GaussianProcess]
+        List of fitted GP models.
+    """
+    x = X[i]
+    y = Y[:, i]
+    models = []
+    for _ in range(replicates):
+        gp_model = GaussianProcess(constuctor)
+        gp_model.fit(x, y, Y_var)
+        models.append(gp_model)
+    return models
+
+
+def fit_processes_joblib(
+    X: Sequence[Ndarray],
+    Y: Sequence[Ndarray],
+    kernels: GPKernel,
+    prior_gen: Union[GPPriorFactory, Sequence[GPPriorFactory]],
+    replicates: int = 1,
+    trainable: GPPriorTrainingFlag = {},
+    operator: Optional[GPOperator] = operator.mul,
+    preprocess: int = 0,
+    Y_var: bool = False,
+    verbose: bool = False,
+) -> List[List[GaussianProcess]]:
+    """
+    Fit Gaussian Processes to the data in parallel using Joblib.
+
+    N traces and M replicates will result in N * M models.
+    This version groups the replicates by cell: each job fits all replicates for one cell,
+    thereby reducing data copying overhead.
+
+    Parameters
+    ----------
+    X : Sequence[Ndarray]
+        List of input domains (one per cell).
+    Y : Sequence[Ndarray]
+        List of input traces (one per cell).
+    kernels : GPKernel
+        Kernel (or list of kernels) for the GP model.
+    prior_gen : GPPriorFactory or Sequence[GPPriorFactory]
+        A callable (or list of callables) that generate the priors for each model.
+    replicates : int, optional
+        Number of replicates to fit per cell (default is 1).
+    trainable : GPPriorTrainingFlag, optional
+        Dictionary to set which parameters are trainable (default is {}).
+    operator : Optional[GPOperator], optional
+        Operator to combine kernels (defaults to multiplication if not provided).
+    preprocess : int, optional
+        0: no preprocessing; 1: centre the trace; 2: standardise the trace (default is 0).
+    Y_var : bool, optional
+        Whether to calculate variance of missing data (default is False).
+    verbose : bool, optional
+        If True, prints information during fitting (default is False).
+
+    Returns
+    -------
+    List[List[GaussianProcess]]
+        A list (one per cell) of lists of fitted GP models (one per replicate).
+    """
+    # Determine the constructors for each trace.
+    if callable(prior_gen):
+        constructors = [
+            GPRConstructor(kernels, prior_gen, trainable, operator) for _ in Y
+        ]
+    else:
+        if len(prior_gen) != len(Y):
+            raise ValueError(
+                f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
+            )
+        constructors = [
+            GPRConstructor(kernels, gen, trainable, operator) for gen in prior_gen
+        ]
+
+    # Check if Y is homogeneous (all traces are the same length).
+    if all(len(y) == len(Y[0]) for y in Y):
+        print("Homogeneous traces")
+        Y_mat = np.stack(Y, axis=1)
+        folder = "./temp"
+        os.makedirs(folder, exist_ok=True)
+
+        path = os.path.join(folder, "Y_memmap")
+        dump(Y_mat, path)
+        Y_processed = load(path, mmap_mode="r")
+
+        result: List[List[GaussianProcess]] = Parallel(
+            n_jobs=-1, backend="loky", verbose=10
+        )(
+            delayed(joblib_fit_memmap_worker)(
+                i, X, Y_processed, Y_var, constructors[i], replicates
+            )
+            for i in range(len(Y))
+        )  # type: ignore
+
+        # Clean up
+        os.remove(path)
+
+        return result
+
+    # Y is a list of arrays, so fit each trace in parallel.
+    # Preprocess traces
+    match preprocess:
+        case 0:
+            Y_processed = Y
+        case 1:
+            Y_processed = [(y - mean(y)) for y in Y]
+        case 2:
+            Y_processed = [(y - mean(y)) / std(y) for y in Y]
+
+    def joblib_fit_trace_worker(
+        index: int, constructor: GPRConstructor
+    ) -> List[GaussianProcess]:
+        x = X[index]
+        y = Y_processed[index]
+        models = []
+        for _ in range(replicates):
+            gp_model = GaussianProcess(constructor)
+            gp_model.fit(x, y, Y_var, verbose)
+            models.append(gp_model)
+        return models
+
+    # Run the worker function in parallel using Joblib.
+    results: List[List[GaussianProcess]] = Parallel(
+        n_jobs=-1, backend="loky", verbose=10
+    )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
+    return results
 
 
 def detrend(
@@ -327,8 +485,8 @@ def load_data(
 
     for y in Y_data:
         y_length = max(nonzero(y))
-        X_data.append(X[:y_length].reshape(-1, 1))
-        Y_data_filtered.append(y[:y_length].reshape(-1, 1))
+        X_data.append(X[: y_length + 1].reshape(-1, 1))
+        Y_data_filtered.append(y[: y_length + 1].reshape(-1, 1))
 
     return X_data, Y_data_filtered
 

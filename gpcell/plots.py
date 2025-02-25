@@ -233,7 +233,7 @@ def plot_rocs_and_timeseries(
 
 
 def compute_rocs_from_file(
-    filename: str, noise: Numeric, n_cells: int
+    filename: str, noise: Numeric, n_cells: int, joblib: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Reads simulated data from a CSV file and computes ROC curves based on
@@ -249,6 +249,8 @@ def compute_rocs_from_file(
         Noise level used in simulation (e.g. np.sqrt(0.1)).
     n_cells : int
         Number of replicates per condition (the file should have 2*CellNum cell columns).
+    joblib : bool, optional
+        Whether to use joblib for parallel processing, by default False.
 
     Returns
     -------
@@ -273,7 +275,7 @@ def compute_rocs_from_file(
     n_cells = dataNORMED.shape[1]
 
     # Compute BIC differences using OscillatorDetector.
-    params = {"verbose": True, "set_noise": noise}
+    params = {"verbose": True, "set_noise": noise, "joblib": joblib}
     od = OscillatorDetector.from_data(filename, "Time", "", "Cell", params=params)
     od.fit("BIC")
     BICdiffM = od.BIC_diffs

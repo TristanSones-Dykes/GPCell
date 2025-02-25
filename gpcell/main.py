@@ -1,5 +1,6 @@
 # Standard Library Imports
 from typing import Iterable, List, Sequence, Tuple, cast
+from functools import partial
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -20,6 +21,7 @@ from numpy import (
     max,
     argsort,
     zeros_like,
+    float64,
 )
 from numpy.random import uniform, multivariate_normal
 from scipy.signal import find_peaks
@@ -31,9 +33,36 @@ from gpflow.kernels import White, Matern12, Cosine, Kernel
 # Internal Project Imports
 from gpcell.backend import GaussianProcess
 from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag
-from .utils import load_data, fit_processes, background_noise, detrend
+from .utils import (
+    load_data,
+    fit_processes,
+    background_noise,
+    detrend,
+    fit_processes_joblib,
+)
 
 
+# Top level prior generators for joblib
+def ou_prior(noise: float64):
+    """Top-level OU prior generator."""
+    return {
+        "kernel.lengthscales": uniform(0.1, 2.0),
+        "kernel.variance": uniform(0.1, 2.0),
+        "likelihood.variance": noise**2,
+    }
+
+
+def ouosc_prior(noise: float64):
+    """Top-level OU+Oscillator prior generator."""
+    return {
+        "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
+        "kernel.kernels[0].variance": uniform(0.1, 2.0),
+        "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
+        "likelihood.variance": noise**2,
+    }
+
+
+# Main class
 class OscillatorDetector:
     def __init__(self, X, Y, N, *args, **kwargs):
         # default arguments
@@ -41,6 +70,7 @@ class OscillatorDetector:
             "verbose": False,
             "plots": [],
             "set_noise": None,
+            "joblib": False,
         }
         for key, value in default_kwargs.items():
             if key not in kwargs:
@@ -50,6 +80,7 @@ class OscillatorDetector:
         self.verbose = kwargs["verbose"]
         self.plots = set(kwargs["plots"])
         self.set_noise = kwargs["set_noise"]
+        self.joblib = kwargs["joblib"]
 
         # validate arguments
         if not all(
@@ -80,11 +111,11 @@ class OscillatorDetector:
 
             print(f"Plots: {'on' if self.plots else 'off'}")
             print("\n")
-            print("Fitting background noise...")
 
         # preprocessing
         # --- background noise --- #
         if self.set_noise is None:
+            print("Fitting background noise...")
             self.mean_noise, self.bckgd_GPs = background_noise(
                 self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
             )
@@ -181,24 +212,33 @@ class OscillatorDetector:
             "BOOTSTRAP": ["BIC"],
         }
 
-        # define priors
-        ou_priors = [
-            lambda noise=noise: {
-                "kernel.lengthscales": uniform(0.1, 2.0),
-                "kernel.variance": uniform(0.1, 2.0),
-                "likelihood.variance": noise**2,
-            }
-            for noise in self.noise_list
-        ]
-        ouosc_priors = [
-            lambda noise=noise: {
-                "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
-                "kernel.kernels[0].variance": uniform(0.1, 2.0),
-                "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
-                "likelihood.variance": noise**2,
-            }
-            for noise in self.noise_list
-        ]
+        # Define prior generators
+        match self.joblib:
+            case True:
+                ou_priors = [partial(ou_prior, noise) for noise in self.noise_list]
+                ouosc_priors = [
+                    partial(ouosc_prior, noise) for noise in self.noise_list
+                ]
+            case False:
+                ou_priors = [
+                    lambda noise=noise: {
+                        "kernel.lengthscales": uniform(0.1, 2.0),
+                        "kernel.variance": uniform(0.1, 2.0),
+                        "likelihood.variance": noise**2,
+                    }
+                    for noise in self.noise_list
+                ]
+                ouosc_priors = [
+                    lambda noise=noise: {
+                        "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
+                        "kernel.kernels[0].variance": uniform(0.1, 2.0),
+                        "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
+                        "likelihood.variance": noise**2,
+                    }
+                    for noise in self.noise_list
+                ]
+            case _:
+                raise ValueError("joblib must be a boolean")
 
         # set trainables
         ou_trainables = {"likelihood.variance": False}
@@ -272,6 +312,13 @@ class OscillatorDetector:
             ouosc_trainables,
             10,
         )
+
+        if self.verbose:
+            print(
+                "Number of cells counted as oscillatory (BIC method): {0}/{1}".format(
+                    sum(array(self.BIC_diffs) > 3), len(self.BIC_diffs)
+                )
+            )
 
         # generate plot
         if "BIC" in self.plots:
@@ -402,34 +449,60 @@ class OscillatorDetector:
             self.generate_plot("periods")
 
     def _fit_ou_ouosc(
-        self, X, Y, ou_priors, ou_trainables, ouosc_priors, ouosc_trainables, K
+        self,
+        X,
+        Y,
+        ou_priors,
+        ou_trainables,
+        ouosc_priors,
+        ouosc_trainables,
+        K,
     ) -> Tuple[List[float], List[float], List[Kernel], List[Kernel], List[float]]:
         ou_kernel = Matern12
         ouosc_kernel = [Matern12, Cosine]
 
         # fit processes
-        ou_GPs = cast(
-            Iterable[List[GaussianProcess]],
-            fit_processes(
-                X,
-                Y,
-                ou_kernel,
-                ou_priors,
-                replicates=K,
-                trainable=ou_trainables,
-            ),
-        )
-        ouosc_GPs = cast(
-            Iterable[List[GaussianProcess]],
-            fit_processes(
-                X,
-                Y,
-                ouosc_kernel,
-                ouosc_priors,
-                replicates=K,
-                trainable=ouosc_trainables,
-            ),
-        )
+        match self.joblib:
+            case True:
+                ou_GPs = fit_processes_joblib(
+                    X,
+                    Y,
+                    ou_kernel,
+                    ou_priors,
+                    replicates=K,
+                    trainable=ou_trainables,
+                )
+                ouosc_GPs = fit_processes_joblib(
+                    X,
+                    Y,
+                    ouosc_kernel,
+                    ouosc_priors,
+                    replicates=K,
+                    trainable=ouosc_trainables,
+                )
+            case False:
+                ou_GPs = cast(
+                    Iterable[List[GaussianProcess]],
+                    fit_processes(
+                        X,
+                        Y,
+                        ou_kernel,
+                        ou_priors,
+                        replicates=K,
+                        trainable=ou_trainables,
+                    ),
+                )
+                ouosc_GPs = cast(
+                    Iterable[List[GaussianProcess]],
+                    fit_processes(
+                        X,
+                        Y,
+                        ouosc_kernel,
+                        ouosc_priors,
+                        replicates=K,
+                        trainable=ouosc_trainables,
+                    ),
+                )
 
         # calculate LLR and BIC
         LLRs = []
