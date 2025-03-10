@@ -1,5 +1,6 @@
 # GPcell ignores
 docs/
+data/simulation/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
