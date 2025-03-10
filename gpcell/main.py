@@ -32,7 +32,7 @@ from gpflow.kernels import White, Matern12, Cosine, Kernel
 
 # Internal Project Imports
 from gpcell.backend import GaussianProcess
-from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag
+from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag, Ndarray
 from .utils import (
     load_data,
     fit_processes,
@@ -64,7 +64,9 @@ def ouosc_prior(noise: float64):
 
 # Main class
 class OscillatorDetector:
-    def __init__(self, X, Y, N, *args, **kwargs):
+    def __init__(
+        self, X: Sequence[Ndarray], Y: Sequence[Ndarray], N: int, *args, **kwargs
+    ):
         # default arguments
         default_kwargs = {
             "verbose": False,
@@ -121,7 +123,7 @@ class OscillatorDetector:
             )
             self.noise_list = [self.mean_noise / std(y) for y in self.Y]
         else:
-            self.noise_list = [self.set_noise for _ in range(self.N)]
+            self.noise_list: List[float64] = [self.set_noise for _ in range(self.N)]
 
         # --- detrend data --- #
         self.Y_detrended, self.detrend_GPs = detrend(
@@ -618,7 +620,7 @@ class OscillatorDetector:
                 )
             )
 
-            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")
+            plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")  # type: ignore
             plt.plot([cutoff, cutoff], [0, 2], "r--", label="Cutoff")
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
@@ -628,13 +630,13 @@ class OscillatorDetector:
             fig = plt.figure(figsize=(20 / 2.54, 10 / 2.54))
 
             plt.subplot(1, 2, 1)
-            plt.hist(self.LLRs, bins=linspace(0, 40, 40))
+            plt.hist(self.LLRs, bins=linspace(0, 40, 40))  # type: ignore
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of experimental cells")
 
             plt.subplot(1, 2, 2)
-            plt.hist(self.synth_LLRs, bins=linspace(0, 40, 40))
+            plt.hist(self.synth_LLRs, bins=linspace(0, 40, 40))  # type: ignore
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of synthetic non-oscillatory OU cells")
