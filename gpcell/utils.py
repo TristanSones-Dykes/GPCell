@@ -20,7 +20,7 @@ import pandas as pd
 import tensorflow_probability as tfp
 
 # Direct Namespace Imports
-from numpy import float64, ndarray, nonzero, std, mean, max
+from numpy import float64, nonzero, std, mean, max
 from gpflow import Parameter
 from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
@@ -30,6 +30,7 @@ from gpflow.utilities import to_default_float
 from gpcell.backend import (
     GaussianProcess,
     GPRConstructor,
+    _joblib_fit_memmap_worker,
     _simulate_replicate_mod9,
     _simulate_replicate_mod9_nodelay,
     Ndarray,
@@ -179,47 +180,6 @@ def fit_processes(
             raise ValueError(f"Invalid number of replicates: {replicates}")
 
 
-def joblib_fit_memmap_worker(
-    i: int,
-    X: Sequence[Ndarray],
-    Y: ndarray,
-    Y_var: bool,
-    constuctor: GPRConstructor,
-    replicates: int,
-) -> List[GaussianProcess]:
-    """
-    Worker function for fitting Gaussian Processes using Joblib with memory-mapped data.
-
-    Parameters
-    ----------
-    i : int
-        Index of the trace to fit.
-    X : Sequence[Ndarray]
-        List of input domains.
-    Y : ndarray
-        Memory-mapped array of input traces.
-    Y_var : bool
-        Whether to calculate variance of missing data.
-    constructor : GPRConstructor
-        Constructor for the GP model.
-    replicates : int
-        Number of replicates to fit.
-
-    Returns
-    -------
-    List[GaussianProcess]
-        List of fitted GP models.
-    """
-    x = X[i]
-    y = Y[:, i]
-    models = []
-    for _ in range(replicates):
-        gp_model = GaussianProcess(constuctor)
-        gp_model.fit(x, y, Y_var)
-        models.append(gp_model)
-    return models
-
-
 def fit_processes_joblib(
     X: Sequence[Ndarray],
     Y: Sequence[Ndarray],
@@ -300,7 +260,7 @@ def fit_processes_joblib(
         result: List[List[GaussianProcess]] = Parallel(
             n_jobs=-1, backend="loky", verbose=1
         )(
-            delayed(joblib_fit_memmap_worker)(
+            delayed(_joblib_fit_memmap_worker)(
                 i, X, Y_processed, Y_var, constructors[i], replicates
             )
             for i in range(len(Y))

@@ -32,7 +32,12 @@ from gpflow.kernels import White, Matern12, Cosine, Kernel
 
 # Internal Project Imports
 from gpcell.backend import GaussianProcess, GPPriorFactory, GPPriorTrainingFlag, Ndarray
-from gpcell.backend.priors import hes_ou_prior, hes_ouosc_prior
+from gpcell.backend.priors import (
+    hes_ou_prior,
+    hes_ouosc_prior,
+    ou_trainables,
+    ouosc_trainables,
+)
 from .utils import (
     load_data,
     fit_processes,
@@ -55,6 +60,8 @@ class OscillatorDetector:
             "joblib": False,
             "ou_prior_gen": hes_ou_prior,
             "ouosc_prior_gen": hes_ouosc_prior,
+            "ou_trainables": ou_trainables,
+            "ouosc_trainables": ouosc_trainables,
         }
         for key, value in default_kwargs.items():
             if key not in kwargs:
@@ -67,6 +74,8 @@ class OscillatorDetector:
         self.joblib = kwargs["joblib"]
         self.ou_prior = kwargs["ou_prior_gen"]
         self.ouosc_prior = kwargs["ouosc_prior_gen"]
+        self.ou_trainables = kwargs["ou_trainables"]
+        self.ouosc_trainables = kwargs["ouosc_trainables"]
 
         # validate arguments
         if not all(
@@ -229,13 +238,6 @@ class OscillatorDetector:
                 ]
             case _:
                 raise ValueError("joblib must be a boolean")
-
-        # set trainables
-        ou_trainables = {"likelihood.variance": False}
-        ouosc_trainables = {
-            "likelihood.variance": False,
-            (1, "variance"): False,
-        }
 
         # Recursive helper function to run a method and its dependencies.
         def run_method(method: str):
@@ -718,7 +720,7 @@ class OscillatorDetector:
         elif target == "MCMC":
             N = min(self.N, 12)
             row, col = N, 2
-            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
+            fig = plt.figure(figsize=(plot_size * col, plot_size * row))
 
             for i, (x, y, ou, ouosc) in enumerate(
                 zip(self.X, self.Y_detrended, self.ou_GPs, self.ouosc_GPs)

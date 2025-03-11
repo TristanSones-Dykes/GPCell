@@ -196,7 +196,7 @@ def _simulate_replicate_mod9_nodelay(
     MUP = par[3]
     ALPHAM = par[4]
     ALPHAP = par[5]
-    tau = par[6]  # Not used in the nodelay version.
+    # tau = par[6]  # Not used in the nodelay version.
 
     num_times = out_times.shape[0]
     m_out = empty(num_times, dtype=int32)
