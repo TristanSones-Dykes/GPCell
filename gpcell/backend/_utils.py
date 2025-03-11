@@ -3,11 +3,12 @@ from typing import Mapping, Tuple
 
 # Third-Party Library Imports
 import tensorflow_probability as tfp
+import numpy as np
 
 # Direct Namespace Imports
 from tensorflow import Module
 from gpflow import Parameter
-from numpy import empty, float64, int32, ndarray, log, random
+from numpy import empty, float64, inf, int32, ndarray, log
 from numba import njit
 
 # Internal Project Imports
@@ -85,8 +86,34 @@ def _simulate_replicate_mod9(
     out_times: ndarray,  # best passed as a numpy array of float64
 ) -> Tuple[ndarray, ndarray]:
     """
-    Runs one replicate of the Gillespie algorithm with delays.
-    Uses a fixed-size array for delayed events.
+    Runs the Gillespie algorithm with delays.
+
+    Parameters
+    ----------
+    N : int
+        The system size.
+    par : np.ndarray
+        Parameter vector:
+            par[0] = P0
+            par[1] = NP
+            par[2] = MUM
+            par[3] = MUP
+            par[4] = ALPHAM
+            par[5] = ALPHAP
+            par[6] = tau  (unused in this nodelay version)
+    mstart : int
+        Initial value for m.
+    pstart : int
+        Initial value for p.
+    out_times : np.ndarray
+        Array of output times (must be sorted in increasing order).
+
+    Returns
+    -------
+    mout : np.ndarray
+        A 1D array (length = number of output times) of m values.
+    pout : np.ndarray
+        A 1D array (length = number of output times) of p values.
     """
     # Unpack parameters.
     P0 = par[0]
@@ -106,10 +133,11 @@ def _simulate_replicate_mod9(
     p = pstart
     t = 0.0
 
-    # Use a fixed-size array for delayed events.
-    max_delays = 10
+    # Preallocate a large array for delayed events (circular buffer).
+    max_delays = 200
     rlist = empty(max_delays, dtype=float64)
-    rlist_count = 0
+    rlist_start = 0  # Index of the first element in the queue.
+    rlist_count = 0  # Number of elements currently in the buffer.
 
     # Initial propensities.
     a1_val = MUM * m
@@ -119,19 +147,26 @@ def _simulate_replicate_mod9(
 
     while t < out_times[num_times - 1]:
         a0 = a1_val + a2_val + a3_val + a4_val
-        r1 = random.random()
-        r2 = random.random()
+        r1 = np.random.random()
+        r2 = np.random.random()
         dt = (1.0 / a0) * log(1.0 / r1)
 
         # Check for a delayed event.
-        if rlist_count > 0 and t <= rlist[0] and rlist[0] <= (t + dt):
+        if rlist_count > 0:
+            first_event = rlist[rlist_start]
+        else:
+            first_event = inf  # No event scheduled.
+
+        # Check for a delayed event.
+        if rlist_count > 0 and t <= first_event <= (t + dt):
             m_new = m + 1
             p_new = p
-            t_new = rlist[0]
-            # Shift the delay array to remove the first element.
-            for k in range(1, rlist_count):
-                rlist[k - 1] = rlist[k]
+            t_new = first_event
+
+            # Remove the first event by advancing the head.
+            rlist_start = (rlist_start + 1) % max_delays
             rlist_count -= 1
+
             a1_val = MUM * m_new
             a3_val = ALPHAP * m_new
         else:
@@ -155,12 +190,11 @@ def _simulate_replicate_mod9(
                 a4_val = N * ALPHAM / (1.0 + ((p_new / N) / P0) ** NP)
             else:
                 # Schedule a delayed event.
-                if rlist_count < max_delays:
-                    rlist[rlist_count] = t + tau
-                    rlist_count += 1
-                else:
-                    # If rlist is full, overwrite the last element.
-                    rlist[max_delays - 1] = t + tau
+                # Compute the index at which to insert the new event.
+                index = (rlist_start + rlist_count) % max_delays
+                rlist[index] = t + tau
+                rlist_count += 1
+
                 m_new = m
                 p_new = p
             t_new = t + dt
@@ -187,40 +221,68 @@ def _simulate_replicate_mod9_nodelay(
     out_times: ndarray,
 ) -> Tuple[ndarray, ndarray]:
     """
-    Runs one replicate of the Gillespie algorithm without delays.
-    Uses a fixed-size array for delayed events (unused in typical execution).
+    Runs the Gillespie algorithm without delays.
+
+    Parameters
+    ----------
+    N : int
+        The system size.
+    par : np.ndarray
+        Parameter vector:
+            par[0] = P0
+            par[1] = NP
+            par[2] = MUM
+            par[3] = MUP
+            par[4] = ALPHAM
+            par[5] = ALPHAP
+            par[6] = tau  (unused in this nodelay version)
+    mstart : int
+        Initial value for m.
+    pstart : int
+        Initial value for p.
+    out_times : np.ndarray
+        Array of output times (must be sorted in increasing order).
+
+    Returns
+    -------
+    mout : np.ndarray
+        A 1D array (length = number of output times) of m values.
+    pout : np.ndarray
+        A 1D array (length = number of output times) of p values.
     """
+    num_times = out_times.shape[0]
+    m_out = empty(num_times, dtype=int32)
+    p_out = empty(num_times, dtype=int32)
+
+    # Unpack parameters.
     P0 = par[0]
     NP = par[1]
     MUM = par[2]
     MUP = par[3]
     ALPHAM = par[4]
     ALPHAP = par[5]
-    # tau = par[6]  # Not used in the nodelay version.
+    # tau = par[6] is not used in this version.
 
-    num_times = out_times.shape[0]
-    m_out = empty(num_times, dtype=int32)
-    p_out = empty(num_times, dtype=int32)
-    j_t_next = 0
-
+    j_t_next = 0  # Output time index.
+    t = 0.0
     m = mstart
     p = pstart
-    t = 0.0
 
     # Fixed-size delay array (will remain unused but required for code symmetry).
     max_delays = 10
     rlist = empty(max_delays, dtype=float64)
     rlist_count = 0
 
-    a1_val = MUM * m
-    a2_val = MUP * p
-    a3_val = ALPHAP * m
-    a4_val = N * ALPHAM / (1.0 + ((p / N) / P0) ** NP)
+    a1 = MUM * m
+    a2 = MUP * p
+    a3 = ALPHAP * m
+    a4 = N * ALPHAM / (1.0 + ((p / N) / P0) ** NP)
 
+    # Run simulation until the final output time.
     while t < out_times[num_times - 1]:
-        a0 = a1_val + a2_val + a3_val + a4_val
-        r1 = random.random()
-        r2 = random.random()
+        a0 = a1 + a2 + a3 + a4
+        r1 = np.random.random()
+        r2 = np.random.random()
         dt = (1.0 / a0) * log(1.0 / r1)
 
         if rlist_count > 0 and t <= rlist[0] and rlist[0] <= (t + dt):
@@ -230,35 +292,36 @@ def _simulate_replicate_mod9_nodelay(
             for k in range(1, rlist_count):
                 rlist[k - 1] = rlist[k]
             rlist_count -= 1
-            a1_val = MUM * m_new
-            a3_val = ALPHAP * m_new
+            a1 = MUM * m_new
+            a3 = ALPHAP * m_new
         else:
-            if r2 * a0 <= a1_val:
+            if r2 * a0 <= a1:
                 m_new = m - 1
                 p_new = p
-                a1_val = MUM * m_new
-                a3_val = ALPHAP * m_new
-            elif r2 * a0 <= a1_val + a2_val:
+                a1 = MUM * m_new
+                a3 = ALPHAP * m_new
+            elif r2 * a0 <= a1 + a2:
                 m_new = m
                 p_new = p - 1
-                a2_val = MUP * p_new
-                a4_val = N * ALPHAM / (1.0 + ((p_new / N) / P0) ** NP)
-            elif r2 * a0 <= a1_val + a2_val + a3_val:
+                a2 = MUP * p_new
+                a4 = N * ALPHAM / (1.0 + ((p_new / N) / P0) ** NP)
+            elif r2 * a0 <= a1 + a2 + a3:
                 m_new = m
                 p_new = p + 1
-                a2_val = MUP * p_new
-                a4_val = N * ALPHAM / (1.0 + ((p_new / N) / P0) ** NP)
+                a2 = MUP * p_new
+                a4 = N * ALPHAM / (1.0 + ((p_new / N) / P0) ** NP)
             else:
                 m_new = m + 1
                 p_new = p
-                a1_val = MUM * m_new
-                a3_val = ALPHAP * m_new
+                a1 = MUM * m_new
+                a3 = ALPHAP * m_new
             t_new = t + dt
 
         t = t_new
         m = m_new
         p = p_new
 
+        # Record the state for each output time passed.
         while j_t_next < num_times and t > out_times[j_t_next]:
             m_out[j_t_next] = m
             p_out[j_t_next] = p

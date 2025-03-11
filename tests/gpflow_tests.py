@@ -142,16 +142,16 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
         self.detector.fit(methods="BIC")
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
-    # def test_bootstrap_classification(self):
-    #     """
-    #     Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
-    #     """
-    #     self.detector.fit(methods="bootstrap")
+    def test_bootstrap_classification(self):
+        """
+        Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
+        """
+        self.detector.fit(methods="bootstrap")
 
-    #     for i, (true, pred) in enumerate(
-    #         zip([False, True, True, False], self.detector.osc_filt[-4:])
-    #     ):
-    #         self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
+        for i, (true, pred) in enumerate(
+            zip([False, True, True, False], self.detector.osc_filt[-4:])
+        ):
+            self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
 
 
 if __name__ == "__main__":
