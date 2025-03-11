@@ -126,9 +126,12 @@ class OscillatorDetector:
             self.noise_list: List[float64] = [self.set_noise for _ in range(self.N)]
 
         # --- detrend data --- #
-        self.Y_detrended, self.detrend_GPs = detrend(
-            self.X, self.Y, 7.0, verbose=self.verbose
-        )
+        if kwargs.get("detrend", True):
+            self.Y_detrended, self.detrend_GPs = detrend(
+                self.X, self.Y, 7.0, verbose=self.verbose
+            )
+        else:
+            self.Y_detrended = self.Y
 
         # generate plots
         pre_plots = {"background", "detrend"}
@@ -136,7 +139,7 @@ class OscillatorDetector:
             self.generate_plot(plot)
 
     @classmethod
-    def from_data(
+    def from_file(
         cls,
         path: str,
         X_name: str,
@@ -517,6 +520,20 @@ class OscillatorDetector:
             ou_LL = [gp.log_posterior() for gp in ou]
             ouosc_LL = [gp.log_posterior() for gp in ouosc]
 
+            # filter nan's from model fitting
+            ou_nan, ouosc_nan = isnan(ou_LL), isnan(ouosc_LL)
+            if all(ou_nan) or all(ouosc_nan):
+                raise ValueError(
+                    f"Cell {i + 1} has only NaN values in model log-likelihoods"
+                )
+            elif any(ou_nan) or any(ouosc_nan):
+                print(
+                    f"Cell {i + 1} has {sum(ou_nan) + sum(ouosc_nan)} NaN values in model log-likelihoods"
+                )
+
+            ou_LL = array(ou_LL)[~ou_nan]
+            ouosc_LL = array(ouosc_LL)[~ouosc_nan]
+
             # take process with highest posterior density
             max_ou_ll = max(ou_LL)
             max_ouosc_ll = max(ouosc_LL)
@@ -575,12 +592,16 @@ class OscillatorDetector:
         fig = None  # Initialize the figure
 
         if target == "background":
-            dim = int(ceil(sqrt(self.M)))
+            M = min(self.M, 9)
+            dim = int(ceil(sqrt(M)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, (x_bckgd, y_bckgd, m) in enumerate(
                 zip(self.X_bckgd, self.bckgd, self.bckgd_GPs)
             ):
+                if i == M:
+                    break
+
                 y_mean, y_var = m(self.X_bckgd[i])
                 deviation = sqrt(m.Y_var) * 2
                 y_bckgd_centred = y_bckgd - mean(y_bckgd)
@@ -593,12 +614,16 @@ class OscillatorDetector:
                 plt.title(f"Background {i + 1}")
 
         elif target == "detrend":
-            dim = int(ceil(sqrt(self.N)))
+            N = min(self.N, 12)
+            dim = int(ceil(sqrt(N)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, (x, y, y_detrended, m) in enumerate(
                 zip(self.X, self.Y, self.Y_detrended, self.detrend_GPs)
             ):
+                if i == N:
+                    break
+
                 y_standardised = (y - mean(y)) / std(y)
                 y_trend = m(x)[0]
 

@@ -20,7 +20,7 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         self.Y_name = "Cell"
 
         # Create OscillatorDetector instance
-        self.detector = gc.OscillatorDetector.from_data(
+        self.detector = gc.OscillatorDetector.from_file(
             path=self.sample_data_path,
             X_name=self.X_name,
             background_name=self.background_name,
@@ -49,7 +49,7 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         """
         params = {"plots": ["invalid_plot"]}
         with self.assertRaises(ValueError) as context:
-            gc.OscillatorDetector.from_data(
+            gc.OscillatorDetector.from_file(
                 path=self.sample_data_path,
                 X_name=self.X_name,
                 background_name=self.background_name,
@@ -71,7 +71,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         params = {"verbose": True}
 
         # Create OscillatorDetector instance with Hes dataset
-        cls.detector = gc.OscillatorDetector.from_data(
+        cls.detector = gc.OscillatorDetector.from_file(
             path=path,
             X_name=X_name,
             background_name=background_name,
@@ -119,7 +119,7 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
         params = {"verbose": True, "joblib": True}
 
         # Create OscillatorDetector instance with Hes dataset
-        cls.detector = gc.OscillatorDetector.from_data(
+        cls.detector = gc.OscillatorDetector.from_file(
             path=path,
             X_name=X_name,
             background_name=background_name,
