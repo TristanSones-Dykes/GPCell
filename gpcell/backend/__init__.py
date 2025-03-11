@@ -8,8 +8,8 @@ from ._types import (
     GPPrior,
     Numeric,
 )
-from ._gpr_constructor import GPRConstructor
-from ._gaussian_process import GaussianProcess
+from .gpr_constructor import GPRConstructor
+from .gaussian_process import GaussianProcess
 from ._utils import _simulate_replicate_mod9, _simulate_replicate_mod9_nodelay
 
 __all__ = [
