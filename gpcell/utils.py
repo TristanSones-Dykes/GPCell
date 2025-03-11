@@ -287,7 +287,7 @@ def fit_processes_joblib(
         Y_processed = load(path, mmap_mode="r")
 
         result: List[List[GaussianProcess]] = Parallel(
-            n_jobs=-1, backend="loky", verbose=10
+            n_jobs=-1, backend="loky", verbose=1
         )(
             delayed(joblib_fit_memmap_worker)(
                 i, X, Y_processed, Y_var, constructors[i], replicates
@@ -324,7 +324,7 @@ def fit_processes_joblib(
 
     # Run the worker function in parallel using Joblib.
     results: List[List[GaussianProcess]] = Parallel(
-        n_jobs=-1, backend="loky", verbose=10
+        n_jobs=-1, backend="loky", verbose=1
     )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
     return results
 
@@ -476,8 +476,8 @@ def load_data(
 
     # Extract domain and trace data
     Y_cols = [col for col in df if col.startswith(Y_name)]  # type: ignore
-    Y_data = [df[col].to_numpy() for col in Y_cols]
-    X = df[X_name].to_numpy()
+    Y_data = [df[col].to_numpy(dtype=float64) for col in Y_cols]
+    X = df[X_name].to_numpy(dtype=float64)
 
     # Filter out zero traces and adjust domains
     X_data = []
@@ -491,7 +491,7 @@ def load_data(
     return X_data, Y_data_filtered
 
 
-def save_sim(X: Sequence[Ndarray], Y: Sequence[Ndarray], filename: str) -> None:
+def save_sim(X: Ndarray, Y: Sequence[Ndarray], filename: str) -> None:
     """
     Saves the simulation data to a CSV file with rows = time points and
     columns = simulated cells (plus a 'Time' column).
@@ -505,9 +505,6 @@ def save_sim(X: Sequence[Ndarray], Y: Sequence[Ndarray], filename: str) -> None:
     filename : str
         Path to the CSV file to create.
     """
-    # All elements of X are identical time arrays, so just use the first one.
-    time = X[0]  # shape (num_time_points,)
-
     # Number of simulated cells (columns)
     n_series = len(Y)
 
@@ -517,13 +514,40 @@ def save_sim(X: Sequence[Ndarray], Y: Sequence[Ndarray], filename: str) -> None:
 
     # Build a DataFrame with each column labeled "Cell 1", "Cell 2", etc.
     col_names = [f"Cell {i + 1}" for i in range(n_series)]
-    df = pd.DataFrame(data, columns=col_names)
+    df = pd.DataFrame(data, columns=col_names, dtype=float64)
 
     # Insert the time as its own column at the front
-    df.insert(0, "Time", time)
+    df.insert(0, "Time", X)
 
     # Write to CSV (no index column, since we include time explicitly)
     df.to_csv(filename, index=False)
+
+
+def load_sim(path: str) -> Tuple[Ndarray, Sequence[Ndarray]]:
+    """
+    Reads simulation data from a CSV file.
+
+    Parameters
+    ----------
+    path : str
+        Path to the CSV file.
+
+    Returns
+    -------
+    Tuple[Sequence[Ndarray], Sequence[Ndarray]]
+        - x - Sequence of time vectors.
+        - data - Sequence of 2D arrays in which each column is a time series.
+    """
+    df = pd.read_csv(path)
+
+    # Extract time and data
+    x = df["Time"].to_numpy(dtype=float64)
+    data = df.drop(columns="Time").to_numpy(dtype=float64)
+
+    # Convert to list of ndarrays as 2D column vectors.
+    data_list = [data[:, i].reshape(-1, 1).flatten() for i in range(data.shape[1])]
+
+    return x, data_list
 
 
 def gillespie_timing_mod9(
@@ -622,7 +646,9 @@ def get_time_series(
     t_final: float,
     noise: float,
     n_cells: int,
-) -> Tuple[Sequence[Ndarray], Sequence[Ndarray]]:
+    path: Optional[str] = None,
+    mode: str = "x",
+) -> Tuple[Ndarray, Sequence[Ndarray]]:
     """
     Recreates the MATLAB GetTimeSeries.m functionality in Python.
 
@@ -638,22 +664,80 @@ def get_time_series(
         Noise level (e.g., sqrt(0.1)).
     n_cells : int
         Number of simulation replicates.
+    path : str, optional
+        Path to check for existing data files (default is None, no loading or writing).
+    mode : str, optional
+        Mode for saving data. `r` will read only/check for param combination, `w` will overwrite, `x` is for exclusive creation (default is "x")
 
     Returns
     -------
-    Tuple[np.ndarray, np.ndarray]
-         x : Time vector (1D array).
-         dataNORMED : 2D array in which each column is a normalized time series.
+    Tuple[Sequence[np.ndarray], Sequence[np.ndarray]]
+        - x - Sequence of time vectors.
+        - dataNORMED - Sequence of 2D arrays in which each column is a normalized time series.
     """
-    # MATLAB: Nvec = [20]; and Output_Times = 5000:30:(5000+Tfinal);
-    Nvec = [20]
+    modes = {"x", "r", "w"}
+
+    # bound and type check params
+    match mode, path:
+        # --- no path => no file I/O --- #
+        case _, None:
+            pass
+
+        # --- mode and path type checks --- #
+        case mode, _ if not isinstance(mode, str):
+            raise TypeError(f"Invalid mode type: {type(mode)}")
+        case _, path if not isinstance(path, str):
+            raise TypeError(f"Invalid path type: {type(path)}")
+
+        # --- mode and path value checks --- #
+        case mode, _ if mode not in modes:
+            raise ValueError(f"Invalid mode: {mode}, must be in {modes}")
+        case _, path if not path.endswith(".csv"):
+            raise ValueError(f"Invalid file extension: {path}, must be .csv")
+
+        # --- file I/O --- #
+        case mode, path:
+            exists = os.path.exists(path)
+            match mode, exists:
+                # --- w mode --- #
+                case "w", _:
+                    # remove file if it exists
+                    if exists:
+                        os.remove(path)
+                    print(
+                        f"Overwrite: File {'exists' if exists else "doesn't exist"} at {path}"
+                    )
+                # --- x and r modes --- #
+                # --- path does not exist --- #
+                case "r", False:
+                    # read-only path provided but does not exist
+                    raise FileNotFoundError(
+                        f"Cannot read from non-existent file: {path}"
+                    )
+                case "x", False:
+                    # exclusive-write path provided but does not exist
+                    print(f"Exclusive: File does not exist at {path}, simulating")
+                    pass
+                # --- path exists --- #
+                case mode, True:
+                    print(f"Simulation data found at {path}, mode: {mode}")
+                    return load_sim(path)
+                case _:
+                    raise ValueError(
+                        f"Invalid combination of mode ({mode}) and path ({path})"
+                    )
+        case _:
+            raise ValueError(f"Invalid combination of mode ({mode}) and path ({path})")
+
+    # MATLAB: Output_Times = 5000:30:(5000+Tfinal);
     out_times = np.arange(5000, 5000 + t_final + 1, 30)
 
-    N = Nvec[0]
+    # Initial conditions for m and p.
+    N = 20
     mstart = 1 * N
     pstart = 30 * N
 
-    # Run the simulations in parallel.
+    # Run the simulations
     mout1, pout1 = gillespie_timing_mod9_nodelay(
         N, par1, n_cells, mstart, pstart, out_times
     )
@@ -663,26 +747,27 @@ def get_time_series(
     x = (out_times.astype(float) - 5000) / 60.0
 
     # Transpose p-values so that rows correspond to times.
-    data1 = np.transpose(pout1)
-    data2 = np.transpose(pout2)
-    dataTOT = np.hstack((data1, data2))
+    pout1, pout2 = pout1.T, pout2.T
+    pout = np.hstack((pout1, pout2))
 
-    # Add noise to each time series.
+    # Create list of ndarrays as column vectors.
+    sim_list = [pout[:, i] for i in range(pout.shape[1])]
+
+    # Process the data
     samp = len(x)
-    dataNORMED = np.zeros_like(dataTOT, dtype=float)
-    for i in range(dataTOT.shape[1]):
-        y1 = dataTOT[:, i].copy()
-        y1 = y1 - np.mean(y1)
-        std_y1 = np.std(y1)
-        if std_y1 == 0:
-            std_y1 = 1
-        y1 = y1 / std_y1
+    processed_list = []
+    for y1 in sim_list:
+        # Normalize the data.
+        y_normal = (y1 - np.mean(y1)) / np.std(y1)
+
+        # Add noise.
         SIGMA = np.diag((noise**2) * np.ones(samp))
         measerror = np.random.multivariate_normal(np.zeros(samp), SIGMA)
-        y2 = y1 + measerror
-        dataNORMED[:, i] = y2
+        y_processed = y_normal + measerror
+        processed_list.append(y_processed.reshape(-1, 1))
 
-        # Convert to list of ndarrays as 2D column vectors.
-    x_list = [x]
-    data_list = [dataNORMED[:, i].reshape(-1, 1) for i in range(dataNORMED.shape[1])]
-    return x_list, data_list
+    # Save the data to a CSV file.
+    if path:
+        save_sim(x, processed_list, path)
+
+    return x, [y.flatten() for y in processed_list]

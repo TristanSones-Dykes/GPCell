@@ -73,6 +73,8 @@ class OscillatorDetector:
             "plots": [],
             "set_noise": None,
             "joblib": False,
+            "ou_prior_gen": ou_prior,
+            "ouosc_prior_gen": ouosc_prior,
         }
         for key, value in default_kwargs.items():
             if key not in kwargs:
@@ -83,6 +85,8 @@ class OscillatorDetector:
         self.plots = set(kwargs["plots"])
         self.set_noise = kwargs["set_noise"]
         self.joblib = kwargs["joblib"]
+        self.ou_prior = kwargs["ou_prior_gen"]
+        self.ouosc_prior = kwargs["ouosc_prior_gen"]
 
         # validate arguments
         if not all(
@@ -545,8 +549,10 @@ class OscillatorDetector:
 
             # calculate LLR and BIC
             LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
-            BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
-            BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
+            # BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
+            # BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
+            BIC_OUosc = -2 * max_ouosc_ll / len(x)
+            BIC_OU = -2 * max_ou_ll / len(x)
             BIC_diff = BIC_OU - BIC_OUosc
 
             # calculate period
@@ -639,12 +645,6 @@ class OscillatorDetector:
             fig = plt.figure(figsize=(12 / 2.54, 6 / 2.54))
 
             cutoff = 3
-            print(
-                "Number of cells counted as oscillatory (BIC method): {0}/{1}".format(
-                    sum(array(self.BIC_diffs) > cutoff), len(self.BIC_diffs)
-                )
-            )
-
             plt.hist(self.BIC_diffs, bins=linspace(-20, 20, 40), label="BIC")  # type: ignore
             plt.plot([cutoff, cutoff], [0, 2], "r--", label="Cutoff")
             plt.xlabel("LLR")

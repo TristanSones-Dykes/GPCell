@@ -5,7 +5,6 @@ from typing import (
 
 # Third-Party Library Imports
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
@@ -13,7 +12,7 @@ from astropy.timeseries import LombScargle
 
 # Internal Project Imports
 from gpcell import OscillatorDetector
-from gpcell.backend import Numeric
+from gpcell.utils import load_sim
 
 
 def plot_rocs_and_timeseries(
@@ -41,21 +40,52 @@ def plot_rocs_and_timeseries(
     Generates a 3x3 grid of subplots replicating the MATLAB figure.
 
     Subplots:
-      1. (A) Experiment 1, first time series (from dataNORMED1[:,0]).
-      2. (B) Experiment 1, second time series (from dataNORMED1[:,1]).
-      3. (C) ROC curves for experiment 1: red = GP (BIC-based), blue = L-S.
-      4. (D) Experiment 2, first time series (from dataNORMED2[:,0]).
-      5. (E) Experiment 2, second time series (from dataNORMED2[:,1]).
+      1. (A) Experiment 1, first time series
+      2. (B) Experiment 1, second time series
+      3. (C) ROC curves for experiment 1.
+      4. (D) Experiment 2, first time series
+      5. (E) Experiment 2, second time series
       6. (F) ROC curves for experiment 2.
-      7. (G) Experiment 3, first time series (from dataNORMED3[:,0]).
-      8. (H) Experiment 3, second time series (from dataNORMED3[:,1]).
+      7. (G) Experiment 3, first time series
+      8. (H) Experiment 3, second time series
       9. (I) ROC curves for experiment 3.
     """
+
+    # --- Debug / Diagnostic prints ---
+    print("=== Debug Info: Checking shapes and partial data ===")
+    print("dataNORMED1 shape:", dataNORMED1.shape)
+    print("dataNORMED2 shape:", dataNORMED2.shape)
+    print("dataNORMED3 shape:", dataNORMED3.shape)
+
+    print("FP11[:5]:", FP11[:5], "TP11[:5]:", TP11[:5])
+    print("FP21[:5]:", FP21[:5], "TP21[:5]:", TP21[:5])
+    print("FP12[:5]:", FP12[:5], "TP12[:5]:", TP12[:5])
+    print("FP22[:5]:", FP22[:5], "TP22[:5]:", TP22[:5])
+    print("FP13[:5]:", FP13[:5], "TP13[:5]:", TP13[:5])
+    print("FP23[:5]:", FP23[:5], "TP23[:5]:", TP23[:5])
+    print("===================================================")
+
+    # Before plotting, you can do some checks:
+    #  - For example, dataNORMEDX.shape[1] should be >= 2 to plot columns 0 and 1
+    #  - If shapes are invalid, you can raise an error or skip those subplots.
+    if dataNORMED1.shape[1] < 2:
+        print(
+            "Warning: dataNORMED1 has fewer than 2 columns, skipping second trace plot."
+        )
+    if dataNORMED2.shape[1] < 2:
+        print(
+            "Warning: dataNORMED2 has fewer than 2 columns, skipping second trace plot."
+        )
+    if dataNORMED3.shape[1] < 2:
+        print(
+            "Warning: dataNORMED3 has fewer than 2 columns, skipping second trace plot."
+        )
+
     plt.figure(figsize=(15, 15))
 
     # Subplot A: Experiment 1, first cell timeseries.
     ax1 = plt.subplot(3, 3, 1)
-    ax1.plot(x1, dataNORMED1[:, 0])
+    ax1.plot(x1, dataNORMED1[:, 0], label="Trace 1")
     ax1.set_xlim(0, np.max(x1))
     ax1.set_ylim([-4, 4])  # type: ignore
     ax1.set_xlabel("Time (hours)")
@@ -75,8 +105,12 @@ def plot_rocs_and_timeseries(
     )
 
     # Subplot B: Experiment 1, second cell timeseries.
+    # Only plot if we have at least 2 columns:
     ax2 = plt.subplot(3, 3, 2)
-    ax2.plot(x1, dataNORMED1[:, 1])
+    if dataNORMED1.shape[1] >= 2:
+        ax2.plot(x1, dataNORMED1[:, 1], label="Trace 2")
+    else:
+        ax2.text(0.5, 0.5, "Not enough columns", ha="center", va="center")
     ax2.set_xlim(0, np.max(x1))
     ax2.set_xlabel("Time (hours)")
     ax2.set_ylabel("Normalised expression")
@@ -94,7 +128,6 @@ def plot_rocs_and_timeseries(
 
     # Subplot C: Experiment 1 ROC curves.
     ax3 = plt.subplot(3, 3, 3)
-    # Plot GP ROC (BIC-based) in red, L-S ROC in blue.
     ax3.plot(FP11 / n_cells, TP11 / n_cells, color="r", label="GP")
     ax3.plot(FP21 / n_cells, TP21 / n_cells, color="b", label="L-S")
     ax3.set_xlabel("1 - Specificity (false positive rate)")
@@ -114,7 +147,7 @@ def plot_rocs_and_timeseries(
 
     # Subplot D: Experiment 2, first timeseries.
     ax4 = plt.subplot(3, 3, 4)
-    ax4.plot(x2, dataNORMED2[:, 0])
+    ax4.plot(x2, dataNORMED2[:, 0], label="Trace 1")
     ax4.set_xlim(0, np.max(x2))
     ax4.set_ylim([-4, 4])  # type: ignore
     ax4.set_xlabel("Time (hours)")
@@ -135,7 +168,10 @@ def plot_rocs_and_timeseries(
 
     # Subplot E: Experiment 2, second timeseries.
     ax5 = plt.subplot(3, 3, 5)
-    ax5.plot(x2, dataNORMED2[:, 1])
+    if dataNORMED2.shape[1] >= 2:
+        ax5.plot(x2, dataNORMED2[:, 1], label="Trace 2")
+    else:
+        ax5.text(0.5, 0.5, "Not enough columns", ha="center", va="center")
     ax5.set_xlim(0, np.max(x2))
     ax5.set_xlabel("Time (hours)")
     ax5.set_ylabel("Normalised expression")
@@ -172,7 +208,7 @@ def plot_rocs_and_timeseries(
 
     # Subplot G: Experiment 3, first timeseries.
     ax7 = plt.subplot(3, 3, 7)
-    ax7.plot(x3, dataNORMED3[:, 0])
+    ax7.plot(x3, dataNORMED3[:, 0], label="Trace 1")
     ax7.set_xlim(0, np.max(x3))
     ax7.set_ylim([-4, 4])  # type: ignore
     ax7.set_xlabel("Time (hours)")
@@ -193,7 +229,10 @@ def plot_rocs_and_timeseries(
 
     # Subplot H: Experiment 3, second timeseries.
     ax8 = plt.subplot(3, 3, 8)
-    ax8.plot(x3, dataNORMED3[:, 1])
+    if dataNORMED3.shape[1] >= 2:
+        ax8.plot(x3, dataNORMED3[:, 1], label="Trace 2")
+    else:
+        ax8.text(0.5, 0.5, "Not enough columns", ha="center", va="center")
     ax8.set_xlim(0, np.max(x3))
     ax8.set_xlabel("Time (hours)")
     ax8.set_ylabel("Normalised expression")
@@ -233,7 +272,7 @@ def plot_rocs_and_timeseries(
 
 
 def compute_rocs_from_file(
-    filename: str, noise: Numeric, n_cells: int, joblib: bool = False
+    filename: str, noise: float, n_cells: int, joblib: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Reads simulated data from a CSV file and computes ROC curves based on
@@ -244,79 +283,86 @@ def compute_rocs_from_file(
     ----------
     filename : str
         Path to the CSV file containing the simulated data.
-        The CSV is assumed to have a "Time" column and columns named "Cell 1", "Cell 2", etc.
+        The CSV is assumed to have a "Time" column and 2*n_cells "Cell" columns.
     noise : float
         Noise level used in simulation (e.g. np.sqrt(0.1)).
     n_cells : int
-        Number of replicates per condition (the file should have 2*CellNum cell columns).
+        Number of cells per condition (so total columns = 2*n_cells).
     joblib : bool, optional
         Whether to use joblib for parallel processing, by default False.
 
     Returns
     -------
     FP1 : ndarray
-        Array (length 200) of false-positive counts (BIC method).
+        Array of false-positive counts (BIC method).
     TP1 : ndarray
-        Array (length 200) of true-positive counts (BIC method).
+        Array of true-positive counts (BIC method).
     FP2 : ndarray
-        Array (length 200) of false-positive counts (Lomb Scargle beat detection).
+        Array of false-positive counts (Lomb Scargle method).
     TP2 : ndarray
-        Array (length 200) of true-positive counts (Lomb Scargle beat detection).
+        Array of true-positive counts (Lomb Scargle method).
     """
-    # Read the CSV file into a DataFrame.
-    df = pd.read_csv(filename)
+    # --- Read the generated data  --- #
+    x, y_list = load_sim(filename)
+    total_columns = len(y_list)
 
-    # Extract the time vector and convert it to a numpy array.
-    # Assume the "Time" column is in the CSV.
-    x = df["Time"].values  # x is assumed to be already converted (e.g. in hours)
+    if total_columns != 2 * n_cells:
+        raise ValueError(
+            f"Expected 2*n_cells = {2 * n_cells} columns, but CSV has {total_columns} columns."
+        )
 
-    # Get the simulation data (all columns except "Time")
-    dataNORMED = df.drop(columns="Time").values  # shape: (num_time_points, total_cells)
-    n_cells = dataNORMED.shape[1]
-
-    # Compute BIC differences using OscillatorDetector.
-    params = {"verbose": True, "set_noise": noise, "joblib": joblib}
-    od = OscillatorDetector.from_data(filename, "Time", "", "Cell", params=params)
+    # This detector will perform the model fitting and return BIC differences.
+    params = {
+        "verbose": True,
+        "joblib": joblib,
+        "plots": ["BIC"],
+        "set_noise": noise,
+        "detrend": False,
+    }
+    od = OscillatorDetector.from_file(filename, "Time", "", "Cell", params=params)
     od.fit("BIC")
-    BICdiffM = od.BIC_diffs
+    BICdiffM = od.BIC_diffs  # list or array with length equal to total_columns
     BICdiffTOT = np.array(BICdiffM)
 
-    # Split the BIC differences into two groups:
-    # First CellNum are one condition (group A, e.g., non-oscillatory)
-    # Next CellNum are the other condition (group B, e.g., oscillatory)
+    # --- ROC analysis using BIC differences --- #
+
+    # Split BIC differences into two groups: A (first n_cells) and B (next n_cells)
     A = BICdiffTOT[:n_cells]
     B = BICdiffTOT[n_cells : 2 * n_cells]
 
-    # --- ROC using BIC differences ---
-    # Sweep through a range of thresholds.
-    thresh = np.linspace(np.min(BICdiffTOT) - 1, np.max(BICdiffTOT) + 1, 200)
+    # Define a threshold vector spanning a little below the min to a little above the max.
+    thresh = np.linspace(BICdiffTOT.min() - 1, BICdiffTOT.max() + 1, 200)
     FP1 = np.zeros_like(thresh)
     TP1 = np.zeros_like(thresh)
     for i, th in enumerate(thresh):
-        FP1[i] = np.sum(A > th)  # false positives from group A
-        TP1[i] = np.sum(B > th)  # true positives from group B
+        FP1[i] = np.sum(A > th)
+        TP1[i] = np.sum(B > th)
 
-    # --- ROC using Lomb–Scargle beat detection ---
-    # Define an exponential range of thresholds.
+    # --- ROC analysis using Lomb–Scargle beat detection ---#
+
+    # Define thrvec as the exponential of 200 points linearly spaced between -15 and -0.01
     thrvec = np.exp(np.linspace(-15, -0.01, 200))
+
+    # Preallocate arrays for FP2 and TP2. Their length is the same as thrvec.
     FP2 = np.zeros(len(thrvec))
     TP2 = np.zeros(len(thrvec))
+
+    # Preallocate beatvec for the number of columns in y_list
+    beatvec = np.zeros(total_columns)
+
+    # Loop over threshold values
     for i, thr in enumerate(thrvec):
-        beatvec = np.zeros(n_cells)
-        # For each cell, compute the periodogram and check if it exceeds the false-alarm level.
-        for j in range(n_cells):
-            y1 = dataNORMED[:, j]  # using the original simulated data
-            Pd = 1 - thr
-            # Define a frequency grid; adjust limits as needed.
-            f = np.linspace(0.01, 10, 1000)
-            ls = LombScargle(x, y1)
-            pxx = ls.power(f, normalization="psd")
-            pth = ls.false_alarm_level(Pd)
-            beatvec[j] = 1 if np.any(pxx > pth) else 0  # type: ignore
-        # Split beat detection results into the two groups.
-        A_beat = beatvec[:n_cells]
-        B_beat = beatvec[n_cells : 2 * n_cells]
-        FP2[i] = np.sum(A_beat)
-        TP2[i] = np.sum(B_beat)
+        # For each signal in dataTOT:
+        for j, y in enumerate(y_list):
+            ls = LombScargle(x, y, normalization="standard")
+            freq, power = ls.autopower()
+            p_vals = ls.false_alarm_probability(power)
+            beatvec[j] = int(np.any(p_vals < thr))
+
+        # Split detections into two groups, analogous to MATLAB’s A and B.
+        A = beatvec[:n_cells]
+        B = beatvec[n_cells : 2 * n_cells]
+        FP2[i] = np.sum(A)
+        TP2[i] = np.sum(B)
 
     return FP1, TP1, FP2, TP2
