@@ -1,16 +1,21 @@
 # Standard Library Imports
-from typing import Optional, Tuple
+from typing import Optional, Sequence, Tuple, cast
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from gpflow.optimizers import Scipy
+from gpflow.optimizers import Scipy, SamplingHelper
+from gpflow.models import GPR, GPMC
 from gpflow.posteriors import PrecomputeCacheType
+from gpflow.utilities import to_default_float as f64, parameter_dict
+
+from tensorflow_probability import mcmc
+from tensorflow import function, Tensor, squeeze
 
 # Internal Project Imports
 from ._types import Ndarray
-from ._gpr_constructor import GPRConstructor
+from .gpr_constructor import GPRConstructor
 
 
 NOCACHE = PrecomputeCacheType.NOCACHE
@@ -92,11 +97,65 @@ class GaussianProcess:
         self.log_posterior_density = gp_reg.log_posterior_density().numpy()  # type: ignore
         self.noise = gp_reg.likelihood.variance**0.5  # type: ignore
 
+        # For plotting variance (lose detail on GPR.posterior)
         if Y_var:
             self.Y_var = gp_reg.predict_y(X)[1].numpy()  # type: ignore
 
-        # Keep the posterior for predictions
-        self.fit_gp = gp_reg.posterior()
+        match gp_reg:
+            case GPR():
+                # Keep the posterior for predictions
+                self.fit_gp = gp_reg.posterior()
+            case GPMC():
+                (
+                    self.samples,
+                    self.parameter_samples,
+                    self.param_to_name,
+                    self.name_to_index,
+                ) = self._run_mcmc(gp_reg)
+
+    def _run_mcmc(
+        self, model: GPMC, num_samples: int = 1000, num_burnin_steps: int = 500
+    ):
+        # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
+        hmc_helper = SamplingHelper(
+            model.log_posterior_density, model.trainable_parameters
+        )
+
+        # define model
+        hmc = mcmc.HamiltonianMonteCarlo(
+            target_log_prob_fn=hmc_helper.target_log_prob_fn,
+            num_leapfrog_steps=10,
+            step_size=0.01,
+        )
+        adaptive_hmc = mcmc.SimpleStepSizeAdaptation(
+            hmc,
+            num_adaptation_steps=10,
+            target_accept_prob=f64(0.75),
+            adaptation_rate=0.1,
+        )
+
+        @function(reduce_retracing=True)
+        def run_chain_fn():
+            return mcmc.sample_chain(
+                num_results=num_samples,
+                num_burnin_steps=num_burnin_steps,
+                current_state=hmc_helper.current_state,
+                kernel=adaptive_hmc,
+                trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
+            )
+
+        # run chain and extract samples
+        samples, _ = run_chain_fn()  # type: ignore
+        parameter_samples = hmc_helper.convert_to_constrained_values(samples)
+
+        # map parameter names to indices
+        param_to_name = {param: name for name, param in parameter_dict(model).items()}
+        name_to_index = {
+            param_to_name[param]: i
+            for i, param in enumerate(model.trainable_parameters)
+        }
+
+        return samples, parameter_samples, param_to_name, name_to_index
 
     def log_posterior(
         self,
@@ -117,7 +176,7 @@ class GaussianProcess:
         """
         return self.log_posterior_density
 
-    def plot(
+    def plot_gpr(
         self,
         plot_sd: bool = False,
         new_y: Optional[Ndarray] = None,
@@ -136,7 +195,7 @@ class GaussianProcess:
         if not hasattr(self, "fit_gp"):
             raise ValueError("Model has not been fit yet.")
 
-        X = self.fit_gp.X_data
+        X = cast(Tensor, self.fit_gp.X_data)
         y = self.fit_gp.Y_data
         fit_y = self.fit_gp.fused_predict_f(X)[0]
 
@@ -158,3 +217,17 @@ class GaussianProcess:
                     )
                 except Exception as e:
                     print("Problem with new data to plot: ", e)
+
+    def plot_samples(
+        self,
+        samples: Sequence[Tensor],
+        parameters,
+        y_axis_label: str,
+        param_to_name: dict,
+    ):
+        plt.figure(figsize=(8, 4))
+        for val, param in zip(samples, parameters):
+            plt.plot(squeeze(val), label=param_to_name[param])
+        plt.legend(bbox_to_anchor=(1.0, 1.0))
+        plt.xlabel("HMC iteration")
+        plt.ylabel(y_axis_label)
