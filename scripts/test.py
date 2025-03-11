@@ -13,7 +13,7 @@ def _predict(x, y):
     # Training model with fewer iterations for speed
     gp.optimizers.Scipy().minimize(
         model.training_loss,
-        model.trainable_variables,
+        model.trainable_variables,  # type: ignore
         options=dict(maxiter=20),  # Reduced iterations for speed
     )
     return model
