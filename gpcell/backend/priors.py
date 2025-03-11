@@ -56,6 +56,13 @@ def sim_ouosc_prior(noise: float64) -> GPPrior:
     }
 
 
+# fixed paramaters
+ou_trainables = {"likelihood.variance": False}
+ouosc_trainables = {
+    "likelihood.variance": False,
+    (1, "variance"): False,
+}
+
 # --- MCMC prior generators --- #
 
 
