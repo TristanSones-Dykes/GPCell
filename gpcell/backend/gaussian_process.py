@@ -83,7 +83,6 @@ class GaussianProcess:
         bool
                 Success status
         """
-
         gp_reg = self.constructor(X, y)
 
         opt = Scipy()
@@ -225,6 +224,20 @@ class GaussianProcess:
         y_axis_label: str,
         param_to_name: dict,
     ):
+        """
+        Plot the samples from the MCMC chain
+
+        Parameters
+        ----------
+        samples: Sequence[Tensor]
+                Samples from the MCMC chain
+        parameters
+                Model parameters
+        y_axis_label: str
+                Label for y-axis
+        param_to_name: dict
+                Mapping of parameter names
+        """
         plt.figure(figsize=(8, 4))
         for val, param in zip(samples, parameters):
             plt.plot(squeeze(val), label=param_to_name[param])

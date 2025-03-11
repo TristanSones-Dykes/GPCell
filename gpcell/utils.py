@@ -55,6 +55,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    mcmc: bool = False,
     Y_var: bool = False,
     verbose: bool = False,
 ) -> List[List[GaussianProcess]]: ...
@@ -70,6 +71,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    mcmc: bool = False,
     Y_var: bool = False,
     verbose: bool = False,
 ) -> Iterable[List[GaussianProcess]]: ...
@@ -84,6 +86,7 @@ def fit_processes(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    mcmc: bool = False,
     Y_var: bool = False,
     verbose: bool = False,
 ) -> List[List[GaussianProcess]] | Iterable[List[GaussianProcess]]:
@@ -114,6 +117,8 @@ def fit_processes(
             Operator to combine multiple kernels,
     preprocess: int
             Preprocessing option (0: None, 1: Centre, 2: Standardise)
+    mcmc: bool
+            Use MCMC for inference
     Y_var: bool
             Calculate variance of missing data
     verbose: bool
@@ -128,14 +133,15 @@ def fit_processes(
     match prior_gen:
         case gen if callable(gen):
             constructors = [
-                GPRConstructor(kernels, gen, trainable, operator) for _ in Y
+                GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc) for _ in Y
             ]
         case list():
             assert len(prior_gen) == len(Y), ValueError(
                 f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
             )
             constructors = [
-                GPRConstructor(kernels, gen, trainable, operator) for gen in prior_gen
+                GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc)
+                for gen in prior_gen
             ]
 
     # Preprocess traces
@@ -223,6 +229,7 @@ def fit_processes_joblib(
     trainable: GPPriorTrainingFlag = {},
     operator: Optional[GPOperator] = operator.mul,
     preprocess: int = 0,
+    mcmc: bool = False,
     Y_var: bool = False,
     verbose: bool = False,
 ) -> List[List[GaussianProcess]]:
@@ -251,6 +258,8 @@ def fit_processes_joblib(
         Operator to combine kernels (defaults to multiplication if not provided).
     preprocess : int, optional
         0: no preprocessing; 1: centre the trace; 2: standardise the trace (default is 0).
+    mcmc : bool, optional
+        Whether to use MCMC for inference (default is False).
     Y_var : bool, optional
         Whether to calculate variance of missing data (default is False).
     verbose : bool, optional
@@ -264,7 +273,8 @@ def fit_processes_joblib(
     # Determine the constructors for each trace.
     if callable(prior_gen):
         constructors = [
-            GPRConstructor(kernels, prior_gen, trainable, operator) for _ in Y
+            GPRConstructor(kernels, prior_gen, trainable, operator, mcmc=mcmc)
+            for _ in Y
         ]
     else:
         if len(prior_gen) != len(Y):
@@ -272,7 +282,8 @@ def fit_processes_joblib(
                 f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
             )
         constructors = [
-            GPRConstructor(kernels, gen, trainable, operator) for gen in prior_gen
+            GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc)
+            for gen in prior_gen
         ]
 
     # Check if Y is homogeneous (all traces are the same length).

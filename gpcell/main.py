@@ -10,7 +10,6 @@ from numpy import (
     argmax,
     ceil,
     isnan,
-    log,
     concatenate,
     mean,
     sqrt,
@@ -31,8 +30,8 @@ from gpflow.kernels import White, Matern12, Cosine, Kernel
 # from gpflow.utilities import print_summary
 
 # Internal Project Imports
-from gpcell.backend import GaussianProcess
-from gpcell.backend._types import GPPriorFactory, GPPriorTrainingFlag, Ndarray
+from gpcell.backend import GaussianProcess, GPPriorFactory, GPPriorTrainingFlag, Ndarray
+from gpcell.backend.priors import hes_ou_prior, hes_ouosc_prior
 from .utils import (
     load_data,
     fit_processes,
@@ -40,26 +39,6 @@ from .utils import (
     detrend,
     fit_processes_joblib,
 )
-
-
-# Top level prior generators for joblib
-def ou_prior(noise: float64):
-    """Top-level OU prior generator."""
-    return {
-        "kernel.lengthscales": uniform(0.1, 2.0),
-        "kernel.variance": uniform(0.1, 2.0),
-        "likelihood.variance": noise**2,
-    }
-
-
-def ouosc_prior(noise: float64):
-    """Top-level OU+Oscillator prior generator."""
-    return {
-        "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
-        "kernel.kernels[0].variance": uniform(0.1, 2.0),
-        "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
-        "likelihood.variance": noise**2,
-    }
 
 
 # Main class
@@ -73,8 +52,8 @@ class OscillatorDetector:
             "plots": [],
             "set_noise": None,
             "joblib": False,
-            "ou_prior_gen": ou_prior,
-            "ouosc_prior_gen": ouosc_prior,
+            "ou_prior_gen": hes_ou_prior,
+            "ouosc_prior_gen": hes_ouosc_prior,
         }
         for key, value in default_kwargs.items():
             if key not in kwargs:
@@ -191,7 +170,7 @@ class OscillatorDetector:
     def fit(self, methods: str | List[str] | None = None, *args, **kwargs):
         """
         Extensible fitting method that runs a list of fitting routines in order.
-        The available methods are "BIC" and "BOOTSTRAP". If only a single method (or a list)
+        The available methods are "BIC", "BOOTSTRAP", and "MCMC". If only a single method (or a list)
         is provided, the dependency graph is used to ensure that required methods (e.g., BIC for BOOTSTRAP)
         are run first.
 
@@ -219,14 +198,15 @@ class OscillatorDetector:
         dependencies = {
             "BIC": [],
             "BOOTSTRAP": ["BIC"],
+            "MCMC": [],
         }
 
         # Define prior generators
         match self.joblib:
             case True:
-                ou_priors = [partial(ou_prior, noise) for noise in self.noise_list]
+                ou_priors = [partial(self.ou_prior, noise) for noise in self.noise_list]
                 ouosc_priors = [
-                    partial(ouosc_prior, noise) for noise in self.noise_list
+                    partial(self.ouosc_prior, noise) for noise in self.noise_list
                 ]
             case False:
                 ou_priors = [
@@ -302,17 +282,11 @@ class OscillatorDetector:
         Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
         """
         # --- classify using BIC --- #
-
         if self.verbose:
             print("Fitting BIC...")
 
-        (
-            self.LLRs,
-            self.BIC_diffs,
-            self.k_ou_list,
-            self.k_ouosc_list,
-            self.periods,
-        ) = self._fit_ou_ouosc(
+        # fit OU and OU+Oscillator models
+        ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
             self.X,
             self.Y_detrended,
             ou_priors,
@@ -321,6 +295,15 @@ class OscillatorDetector:
             ouosc_trainables,
             10,
         )
+
+        # calculate LLR and BIC
+        (
+            self.LLRs,
+            self.BIC_diffs,
+            self.k_ou_list,
+            self.k_ouosc_list,
+            self.periods,
+        ) = self._calc_gpr_bic_llr(self.X, self.Y_detrended, ou_GPs, ouosc_GPs)
 
         if self.verbose:
             print(
@@ -379,7 +362,7 @@ class OscillatorDetector:
             synths_detrended, _ = detrend([X for _ in range(K)], synths, 7.0)
 
             # fit OU and OU+Oscillator models
-            LLRs, _, _, _, _ = self._fit_ou_ouosc(
+            ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
                 [X for _ in range(K)],
                 synths_detrended,
                 ou_priors[i],
@@ -387,6 +370,11 @@ class OscillatorDetector:
                 ouosc_priors[i],
                 ouosc_trainables,
                 K,
+            )
+
+            # calculate LLR
+            LLRs, _, _, _, _ = self._calc_gpr_bic_llr(
+                [X for _ in range(K)], synths_detrended, ou_GPs, ouosc_GPs
             )
 
             self.synth_LLRs.extend(LLRs)
@@ -457,16 +445,40 @@ class OscillatorDetector:
         if "periods" in self.plots:
             self.generate_plot("periods")
 
+    def _fit_mcmc(
+        self,
+        ou_priors: Sequence[GPPriorFactory],
+        ou_trainables: GPPriorTrainingFlag,
+        ouosc_priors: Sequence[GPPriorFactory],
+        ouosc_trainables: GPPriorTrainingFlag,
+    ):
+        # --- fit GPs using MCMC and categorise --- #
+        if self.verbose:
+            print("Fitting MCMC...")
+
+        # fit OU and OU+Oscillator models
+        ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
+            self.X,
+            self.Y_detrended,
+            ou_priors,
+            ou_trainables,
+            ouosc_priors,
+            ouosc_trainables,
+            10,
+            mcmc=True,
+        )
+
     def _fit_ou_ouosc(
         self,
-        X,
-        Y,
-        ou_priors,
-        ou_trainables,
-        ouosc_priors,
-        ouosc_trainables,
-        K,
-    ) -> Tuple[List[float], List[float], List[Kernel], List[Kernel], List[float]]:
+        X: Sequence[Ndarray],
+        Y: Sequence[Ndarray],
+        ou_priors: GPPriorFactory | Sequence[GPPriorFactory],
+        ou_trainables: GPPriorTrainingFlag,
+        ouosc_priors: GPPriorFactory | Sequence[GPPriorFactory],
+        ouosc_trainables: GPPriorTrainingFlag,
+        K: int,
+        mcmc: bool = False,
+    ):
         ou_kernel = Matern12
         ouosc_kernel = [Matern12, Cosine]
 
@@ -480,6 +492,7 @@ class OscillatorDetector:
                     ou_priors,
                     replicates=K,
                     trainable=ou_trainables,
+                    mcmc=mcmc,
                 )
                 ouosc_GPs = fit_processes_joblib(
                     X,
@@ -488,31 +501,51 @@ class OscillatorDetector:
                     ouosc_priors,
                     replicates=K,
                     trainable=ouosc_trainables,
+                    mcmc=mcmc,
                 )
             case False:
-                ou_GPs = cast(
-                    Iterable[List[GaussianProcess]],
-                    fit_processes(
-                        X,
-                        Y,
-                        ou_kernel,
-                        ou_priors,
-                        replicates=K,
-                        trainable=ou_trainables,
-                    ),
+                ou_GPs = fit_processes(
+                    X,
+                    Y,
+                    ou_kernel,
+                    ou_priors,
+                    replicates=K,
+                    trainable=ou_trainables,
+                    mcmc=mcmc,
                 )
-                ouosc_GPs = cast(
-                    Iterable[List[GaussianProcess]],
-                    fit_processes(
-                        X,
-                        Y,
-                        ouosc_kernel,
-                        ouosc_priors,
-                        replicates=K,
-                        trainable=ouosc_trainables,
-                    ),
+                ouosc_GPs = fit_processes(
+                    X,
+                    Y,
+                    ouosc_kernel,
+                    ouosc_priors,
+                    replicates=K,
+                    trainable=ouosc_trainables,
+                    mcmc=mcmc,
                 )
 
+        return ou_GPs, ouosc_GPs
+
+    def _calc_gpr_bic_llr(
+        self,
+        X: Sequence[Ndarray],
+        Y: Sequence[Ndarray],
+        ou_GPs: List[List[GaussianProcess]] | Iterable[List[GaussianProcess]],
+        ouosc_GPs: List[List[GaussianProcess]] | Iterable[List[GaussianProcess]],
+    ) -> Tuple[List[float], List[float], List[Kernel], List[Kernel], List]:
+        """
+        Calculate the LLR and BIC for each cell
+
+        Parameters
+        ----------
+        X : Sequence[Ndarray]
+            Input domain
+        Y : Sequence[Ndarray]
+            Target values
+        ou_GPs : List[List[GaussianProcess]]
+            List of OU GPs
+        ouosc_GPs : List[List[GaussianProcess]]
+            List of OU+Oscillator GPs
+        """
         # calculate LLR and BIC
         LLRs = []
         BIC_diffs = []
@@ -554,6 +587,8 @@ class OscillatorDetector:
             BIC_OUosc = -2 * max_ouosc_ll / len(x)
             BIC_OU = -2 * max_ou_ll / len(x)
             BIC_diff = BIC_OU - BIC_OUosc
+
+            BIC_diff *= 100  # un-normalising
 
             # calculate period
             cov_ou_osc = k_ouosc(x).numpy()[0, :]  # type: ignore

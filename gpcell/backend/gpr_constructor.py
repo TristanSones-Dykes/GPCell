@@ -26,6 +26,7 @@ class GPRConstructor:
         prior_gen: GPPriorFactory,
         trainable: GPPriorTrainingFlag = {},
         operator: Optional[GPOperator] = operator.mul,
+        mcmc: bool = False,
     ):
         """
         Defines the kernel as a single kernel or a composite kernel using given operator
@@ -40,6 +41,8 @@ class GPRConstructor:
             Dictionary to set trainable parameters, by default {}
         operator : Optional[Callable[[Kernel, Kernel], Kernel]], optional
             Operator to combine multiple kernels, by default None
+        mcmc : bool, optional
+            Use MCMC for inference, by default False
         """
         match kernels:
             case type():
@@ -54,12 +57,13 @@ class GPRConstructor:
 
         self.prior_gen = prior_gen
         self.trainable = trainable
+        self.mcmc = mcmc
 
-    def __call__(self, X: Ndarray, y: Ndarray, MCMC: bool = False) -> GPR | GPMC:
+    def __call__(self, X: Ndarray, y: Ndarray) -> GPR | GPMC:
         # create new kernel and define model
         kernel = self.kernel()
 
-        match MCMC:
+        match self.mcmc:
             case True:
                 likelihood = Gaussian()
                 model = GPMC((X, y), kernel, likelihood)
