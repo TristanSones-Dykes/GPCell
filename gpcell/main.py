@@ -574,14 +574,66 @@ class OscillatorDetector:
 
             # filter nan's from model fitting
             ou_nan, ouosc_nan = isnan(ou_LL), isnan(ouosc_LL)
-            if all(ou_nan) or all(ouosc_nan):
-                raise ValueError(
-                    f"Cell {i + 1} has only NaN values in model log-likelihoods"
-                )
-            elif any(ou_nan) or any(ouosc_nan):
-                print(
-                    f"Cell {i + 1} has {sum(ou_nan) + sum(ouosc_nan)} NaN values in model log-likelihoods"
-                )
+            if ou_nan.any() or ouosc_nan.any():
+                print(f"Cell {i + 1} has NaNs in the model fitting")
+
+                ou_all, ouosc_all = ou_nan.all(), ouosc_nan.all()
+                if ou_all or ouosc_all:
+                    # select fitting function
+                    match self.joblib:
+                        case True:
+                            f = fit_processes_joblib
+                        case False:
+                            f = fit_processes
+
+                    attempts = 0
+                    # refit model until no NaNs
+                    while (ou_all or ouosc_all) and attempts < 5:
+                        attempts += 1
+                        # fit 10 replicates of each model
+                        ou = next(
+                            iter(
+                                f(
+                                    [x],
+                                    [y],
+                                    Matern12,
+                                    [
+                                        lambda noise=self.noise_list[i]: self.ou_prior(
+                                            noise
+                                        )
+                                    ],
+                                    replicates=10,
+                                    trainable=self.ou_trainables,
+                                )
+                            )
+                        )
+                        ouosc = next(
+                            iter(
+                                f(
+                                    [x],
+                                    [y],
+                                    [Matern12, Cosine],
+                                    [
+                                        lambda noise=self.noise_list[
+                                            i
+                                        ]: self.ouosc_prior(noise)
+                                    ],
+                                    replicates=10,
+                                    trainable=self.ouosc_trainables,
+                                )
+                            )
+                        )
+
+                        # extract and test for NaNs
+                        ou_LL = [gp.log_posterior() for gp in ou]
+                        ouosc_LL = [gp.log_posterior() for gp in ouosc]
+                        ou_nan, ouosc_nan = isnan(ou_LL), isnan(ouosc_LL)
+                        ou_all, ouosc_all = ou_nan.all(), ouosc_nan.all()
+
+                    if attempts == 5:
+                        raise ValueError(
+                            f"Cell {i + 1} could not be fitted, NaN likelihoods"
+                        )
 
             ou_LL = array(ou_LL)[~ou_nan]
             ouosc_LL = array(ouosc_LL)[~ouosc_nan]
