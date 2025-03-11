@@ -59,7 +59,7 @@ def sim_ouosc_prior(noise: float64) -> GPPrior:
 # --- MCMC prior generators --- #
 
 
-def generate_ou_priors(noise: Numeric) -> GPPrior:
+def mcmc_ou_priors(noise: Numeric) -> GPPrior:
     return {
         "kernel.lengthscales": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
         "kernel.variance": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
@@ -67,7 +67,7 @@ def generate_ou_priors(noise: Numeric) -> GPPrior:
     }
 
 
-def generate_ouosc_priors(noise: Numeric) -> GPPrior:
+def mcmc_ouosc_priors(noise: Numeric) -> GPPrior:
     return {
         "kernel.kernels[0].lengthscales.prior": tfd.Uniform(
             low=f64(0.1), high=f64(2.0)
@@ -78,3 +78,15 @@ def generate_ouosc_priors(noise: Numeric) -> GPPrior:
         ),
         "likelihood.variance": noise**2,
     }
+
+
+ou_hyperparameters = [
+    ".kernel.lengthscales",
+    ".kernel.variance",
+]
+
+ouosc_hyperparameters = [
+    ".kernel.kernels[0].lengthscales",
+    ".kernel.kernels[0].variance",
+    ".kernel.kernels[1].lengthscales",
+]

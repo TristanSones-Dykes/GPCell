@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Iterable, List, Sequence, Tuple, cast
+from typing import Iterable, List, Sequence, Tuple
 from functools import partial
 
 # Third-Party Library Imports
@@ -11,6 +11,7 @@ from numpy import (
     ceil,
     isnan,
     concatenate,
+    log,
     mean,
     sqrt,
     std,
@@ -70,7 +71,7 @@ class OscillatorDetector:
         # validate arguments
         if not all(
             [
-                x in {"background", "detrend", "BIC", "LLR", "periods"}
+                x in {"background", "detrend", "BIC", "LLR", "periods", "MCMC"}
                 for x in self.plots
             ]
         ):
@@ -256,6 +257,14 @@ class OscillatorDetector:
                     )
                 elif method == "BOOTSTRAP":
                     self._fit_bootstrap(
+                        ou_priors,
+                        ou_trainables,
+                        ouosc_priors,
+                        ouosc_trainables,
+                        **kwargs,
+                    )
+                elif method == "MCMC":
+                    self._fit_mcmc(
                         ou_priors,
                         ou_trainables,
                         ouosc_priors,
@@ -457,7 +466,7 @@ class OscillatorDetector:
             print("Fitting MCMC...")
 
         # fit OU and OU+Oscillator models
-        ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
+        self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
             self.X,
             self.Y_detrended,
             ou_priors,
@@ -467,6 +476,10 @@ class OscillatorDetector:
             10,
             mcmc=True,
         )
+
+        # plot
+        if "MCMC" in self.plots:
+            self.generate_plot("MCMC")
 
     def _fit_ou_ouosc(
         self,
@@ -582,13 +595,14 @@ class OscillatorDetector:
 
             # calculate LLR and BIC
             LLR = 100 * 2 * (max_ouosc_ll - max_ou_ll) / len(y)
-            # BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
-            # BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
-            BIC_OUosc = -2 * max_ouosc_ll / len(x)
-            BIC_OU = -2 * max_ou_ll / len(x)
+            BIC_OUosc = -2 * max_ouosc_ll + 3 * log(len(y))
+            BIC_OU = -2 * max_ou_ll + 2 * log(len(y))
             BIC_diff = BIC_OU - BIC_OUosc
 
-            BIC_diff *= 100  # un-normalising
+            # BIC_OUosc = -2 * max_ouosc_ll / len(x)
+            # BIC_OU = -2 * max_ou_ll / len(x)
+            # BIC_diff = BIC_OU - BIC_OUosc
+            # BIC_diff *= 100  # un-normalising
 
             # calculate period
             cov_ou_osc = k_ouosc(x).numpy()[0, :]  # type: ignore
@@ -700,6 +714,22 @@ class OscillatorDetector:
             plt.xlabel("LLR")
             plt.ylabel("Frequency")
             plt.title("LLRs of synthetic non-oscillatory OU cells")
+
+        elif target == "MCMC":
+            N = min(self.N, 12)
+            row, col = N, 2
+            fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
+
+            for i, (x, y, ou, ouosc) in enumerate(
+                zip(self.X, self.Y_detrended, self.ou_GPs, self.ouosc_GPs)
+            ):
+                plt.subplot(row, col, 2 * i + 1)
+                ou[0].plot_samples()
+                plt.title(f"OU cell {i + 1}")
+
+                plt.subplot(row, col, 2 * i + 2)
+                ouosc[0].plot_samples()
+                plt.title(f"OU+Oscillator cell {i + 1}")
 
         elif target == "periods":
             if self.periods is None:

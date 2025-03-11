@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Optional, Sequence, Tuple, cast
+from typing import Optional, Tuple, cast
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -9,13 +9,15 @@ from gpflow.optimizers import Scipy, SamplingHelper
 from gpflow.models import GPR, GPMC
 from gpflow.posteriors import PrecomputeCacheType
 from gpflow.utilities import to_default_float as f64, parameter_dict
+from gpflow.kernels import Kernel
 
 from tensorflow_probability import mcmc
-from tensorflow import function, Tensor, squeeze
+from tensorflow import function, Tensor
 
 # Internal Project Imports
 from ._types import Ndarray
 from .gpr_constructor import GPRConstructor
+from .priors import ou_hyperparameters, ouosc_hyperparameters
 
 
 NOCACHE = PrecomputeCacheType.NOCACHE
@@ -219,10 +221,6 @@ class GaussianProcess:
 
     def plot_samples(
         self,
-        samples: Sequence[Tensor],
-        parameters,
-        y_axis_label: str,
-        param_to_name: dict,
     ):
         """
         Plot the samples from the MCMC chain
@@ -238,9 +236,16 @@ class GaussianProcess:
         param_to_name: dict
                 Mapping of parameter names
         """
-        plt.figure(figsize=(8, 4))
-        for val, param in zip(samples, parameters):
-            plt.plot(squeeze(val), label=param_to_name[param])
+        match self.constructor.kernel:
+            case kernel if isinstance(kernel, Kernel):
+                hyperparameters = ou_hyperparameters
+            case _:
+                hyperparameters = ouosc_hyperparameters
+
+        for param_name in hyperparameters:
+            plt.plot(
+                self.parameter_samples[self.name_to_index[param_name]], label=param_name
+            )
         plt.legend(bbox_to_anchor=(1.0, 1.0))
         plt.xlabel("HMC iteration")
-        plt.ylabel(y_axis_label)
+        plt.ylabel("hyperparameter value")
