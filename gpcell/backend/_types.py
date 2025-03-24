@@ -57,7 +57,7 @@ class FixedPriorGen(ABC):
         pass
 
     @abstractmethod
-    def __call__(self, *args, **kwargs) -> GPPrior:
+    def __call__(self, noise) -> GPPrior:
         pass
 
 

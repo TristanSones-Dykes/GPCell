@@ -70,7 +70,7 @@ def generate_prior_data(
             self.priors = priors
             self.i = 0
 
-        def __call__(self, *args, **kwargs) -> GPPrior:
+        def __call__(self, noise=None) -> GPPrior:
             prior = self.priors[self.i]
             self.i = (self.i + 1) % K
             return prior

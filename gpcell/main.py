@@ -1,6 +1,7 @@
 # Standard Library Imports
 from typing import Iterable, List, Sequence, Tuple
 from functools import partial
+from collections.abc import Callable
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
@@ -214,10 +215,29 @@ class OscillatorDetector:
         # Define prior generators
         match self.joblib:
             case True:
-                ou_priors = [partial(self.ou_prior, noise) for noise in self.noise_list]
-                ouosc_priors = [
-                    partial(self.ouosc_prior, noise) for noise in self.noise_list
-                ]
+                # prior is either callable or list of callables
+                match self.ou_prior:
+                    case Callable():
+                        ou_priors = [
+                            partial(self.ou_prior, noise) for noise in self.noise_list
+                        ]
+                    case list():
+                        ou_priors = [
+                            partial(prior, noise)
+                            for prior, noise in zip(self.ou_prior, self.noise_list)
+                        ]
+
+                match self.ouosc_prior:
+                    case Callable():
+                        ouosc_priors = [
+                            partial(self.ouosc_prior, noise)
+                            for noise in self.noise_list
+                        ]
+                    case list():
+                        ouosc_priors = [
+                            partial(prior, noise)
+                            for prior, noise in zip(self.ouosc_prior, self.noise_list)
+                        ]
             case False:
                 ou_priors = [
                     lambda noise=noise: {
