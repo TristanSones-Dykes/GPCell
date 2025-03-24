@@ -1,0 +1,71 @@
+project:
+  type: book
+  
+# details
+book:
+  title: "GPCell: A Performant Framework for Gaussian Processes in Bioinformatics"
+  author: 
+    - name: "Tristan Sones-Dykes"
+      affiliations:
+        - name: "The University of St Andrews"
+          department: "School of Mathematics and Statistics"
+  date: "25 April 2025"
+  date-format: "MMMM YYYY"
+  chapters:
+    - index.qmd
+    - introduction.qmd
+    - methods.qmd
+    - results.qmd
+    - discussion.qmd
+    - references.qmd
+
+# citations
+bibliography: references.bib
+csl: imaa.csl
+
+# global formatting
+mainfont: "EB Garamond"
+monofont: FiraCode-Medium
+toc: true
+toc-depth: 3
+toc-title: "Table of contents"
+lof: true
+lot: true
+number-sections: true
+number-depth: 2
+
+# output-specific
+format:
+  html:
+    theme: simplex
+    fontsize: 1.2em
+    linestretch: 1.7
+    backgroundcolor: "white"
+    fontcolor: "black"
+    knitr:
+      opts_chunk:
+        dev: "ragg_png"
+  pdf:
+    documentclass: scrreprt
+    papersize: a4
+    include-in-header: include_in_header.tex
+    template-partials:
+      - before-body.tex
+      - toc.tex
+    geometry:
+      - inner=3cm
+      - outer=4cm
+      - top=3cm
+      - bottom=4cm
+      - headsep=22pt
+      - headheight=11pt
+      - footskip=33pt
+      - ignorehead
+      - ignorefoot
+      - heightrounded
+
+# envs
+jupyter: python3
+
+
+

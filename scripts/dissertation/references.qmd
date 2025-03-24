@@ -1,0 +1,12 @@
+# References {.unnumbered}
+
+\begingroup
+\raggedright
+::: {#refs}
+:::
+\endgroup
+
+
+\listoffigures
+
+\listoftables
