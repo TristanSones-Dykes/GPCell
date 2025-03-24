@@ -2,6 +2,7 @@
 from typing import (
     List,
     Tuple,
+    cast,
 )
 import unittest
 
@@ -11,7 +12,7 @@ import pandas as pd
 import tensorflow_probability as tfp
 
 # Direct Namespace Imports
-from gpflow.utilities import to_default_float
+from gpflow.utilities import to_default_float, print_summary
 import gpflow
 
 # Internal Project Imports
@@ -206,6 +207,7 @@ def original_analysis(
             m.kernel.lengthscales.assign(OU_priors["kernel.lengthscales"])  # type: ignore
             m.likelihood.variance.assign(OU_priors["likelihood.variance"])  # type: ignore
             gpflow.set_trainable(m.likelihood.variance, False)  # type: ignore
+
             opt = gpflow.optimizers.Scipy()
             opt.minimize(
                 m.training_loss,
@@ -274,11 +276,6 @@ def original_analysis(
         x_curr = time[: y_length[cell]]
         y_curr = y_all[: y_length[cell], cell, None]
 
-        # debug prints to show if the data has been loaded correctly
-        # print(cell)
-        # print(y_curr[-1], " final value in y_curr")
-        # print(y_all[: y_length[cell] + 1, cell, None][-5:], " last 5 values of y_all")
-
         noise = std / np.std(y_curr)
         y_curr = (y_curr - np.mean(y_curr)) / np.std(y_curr)
 
@@ -340,11 +337,11 @@ class TestCorrectness(unittest.TestCase):
         # run the original analysis
         (
             cls.notebook_noise_list,
-            detrend_param_list,
-            LLR_list,
-            BICdiff_list,
-            OU_param_list,
-            OUosc_param_list,
+            cls.detrend_param_list,
+            cls.LLR_list,
+            cls.BICdiff_list,
+            cls.OU_param_list,
+            cls.OUosc_param_list,
         ) = original_analysis(cls.path, cls.OU_prior_gens, cls.OUosc_prior_gens, cls.K)
 
         # run the GPCell analysis
@@ -361,3 +358,74 @@ class TestCorrectness(unittest.TestCase):
     def test_noise(self):
         # check if the results are the same
         self.assertTrue(np.allclose(self.notebook_noise_list, self.noise_list))
+
+    def test_detrend_params(self):
+        # check if the results are the same
+        for i in range(self.N):
+            self.assertTrue(
+                np.allclose(
+                    self.detrend_param_list[i].lengthscales.numpy(),
+                    self.detector.detrend_GPs[i].fit_gp.kernel.lengthscales.numpy(),  # type: ignore
+                )
+            )
+
+        for i in range(self.N):
+            self.assertTrue(
+                np.allclose(
+                    self.detrend_param_list[i].variance.numpy(),
+                    self.detector.detrend_GPs[i].fit_gp.kernel.variance.numpy(),  # type: ignore
+                )
+            )
+
+    def test_OU_params(self):
+        gpcell_OU_GPs = cast(List[List[backend.GaussianProcess]], self.detector.ou_GPs)
+        for i in range(self.N):
+            for j in range(self.K):
+                self.assertTrue(
+                    np.allclose(
+                        self.OU_param_list[i].lengthscales.numpy(),
+                        gpcell_OU_GPs[i][j].fit_gp.kernel.lengthscales.numpy(),  # type: ignore
+                    )
+                )
+                self.assertTrue(
+                    np.allclose(
+                        self.OU_param_list[i].variance.numpy(),
+                        gpcell_OU_GPs[i][j].fit_gp.kernel.variance.numpy(),  # type: ignore
+                    )
+                )
+
+    def test_OUosc_params(self):
+        gpcell_OUosc_GPs = cast(
+            List[List[backend.GaussianProcess]], self.detector.ouosc_GPs
+        )
+        count = 0
+        for i in range(self.N):
+            for j in range(self.K):
+                l_1 = np.allclose(
+                    self.OUosc_param_list[i].kernels[0].lengthscales.numpy(),
+                    gpcell_OUosc_GPs[i][j]
+                    .fit_gp.kernel.kernels[0]  # type: ignore
+                    .lengthscales.numpy(),
+                )
+                var = np.allclose(
+                    self.OUosc_param_list[i].kernels[0].variance.numpy(),
+                    gpcell_OUosc_GPs[i][j]
+                    .fit_gp.kernel.kernels[0]  # type: ignore
+                    .variance.numpy(),
+                )
+                l_2 = np.allclose(
+                    self.OUosc_param_list[i].kernels[1].lengthscales.numpy(),
+                    gpcell_OUosc_GPs[i][j]
+                    .fit_gp.kernel.kernels[1]  # type: ignore
+                    .lengthscales.numpy(),
+                )
+
+                if not any([l_1, var, l_2]):
+                    print(f"Cell {i}, Replicate {j} don't match, printing summaries")
+                    print_summary(gpcell_OUosc_GPs[i][j].fit_gp)
+                    print_summary(self.OUosc_param_list[i])
+                    count += 1
+
+        # expect 20% to mismatch
+        print(f"Number of mismatches: {count}")
+        self.assertLessEqual(count, 0.2 * self.N * self.K)
