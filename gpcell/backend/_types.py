@@ -1,4 +1,5 @@
 # Standard Library Imports
+from abc import ABC, abstractmethod
 from typing import (
     Callable,
     Mapping,
@@ -44,6 +45,22 @@ Type for Gaussian Process prior factories.
 
 Used for defining a pattern that will dynamically generate priors for each GPR model.
 """
+
+
+class FixedPriorGen(ABC):
+    """
+    Abstract class for serving preset priors for Gaussian Process models.
+    """
+
+    @abstractmethod
+    def __init__(self, prior_list: Sequence[GPPrior]) -> None:
+        pass
+
+    @abstractmethod
+    def __call__(self, *args, **kwargs) -> GPPrior:
+        pass
+
+
 GPPriorTrainingFlag = (
     Mapping[str, bool]
     | Mapping[Tuple[int, str], bool]

@@ -1,0 +1,363 @@
+# Standard Library Imports
+from typing import (
+    List,
+    Tuple,
+)
+import unittest
+
+# Third-Party Library Imports
+import numpy as np
+import pandas as pd
+import tensorflow_probability as tfp
+
+# Direct Namespace Imports
+from gpflow.utilities import to_default_float
+import gpflow
+
+# Internal Project Imports
+import gpcell as gc
+from gpcell import backend, utils
+from gpcell.backend._types import GPPrior
+
+# --------------------------------------------------------- #
+# --- script to check correctness of the implementation --- #
+# --------------------------------------------------------- #
+
+
+# prior generation function
+def generate_prior_data(
+    n: int, noise_list: List[np.float64], K: int
+) -> Tuple[List[backend.GPPriorFactory], List[backend.GPPriorFactory]]:
+    """Function to generate priors that can be used to verify models
+
+    Args:
+        n (int): number of cells
+        K (int): number of replicates
+    """
+    np.random.seed(42)
+    OU_priors = []
+    OUosc_priors = []
+
+    for i in range(n):
+        OU = []
+        OUosc = []
+        noise = noise_list[i]
+        for _ in range(K):
+            l_1 = np.random.uniform(0.1, 2.0)
+            var = np.random.uniform(0.1, 2.0)
+            l_2 = np.random.uniform(0.1, 4.0)
+            OU.append(
+                {
+                    "kernel.lengthscales": l_1,
+                    "kernel.variance": var,
+                    "likelihood.variance": noise**2,
+                }
+            )
+            OUosc.append(
+                {
+                    "kernel.kernels[0].lengthscales": l_1,
+                    "kernel.kernels[0].variance": var,
+                    "kernel.kernels[1].lengthscales": l_2,
+                    "likelihood.variance": noise**2,
+                }
+            )
+        OU_priors.append(OU)
+        OUosc_priors.append(OUosc)
+
+    # create fixed prior classes
+    class fixed_prior_generator(backend.FixedPriorGen):
+        def __init__(self, priors: List[backend.GPPrior]):
+            self.priors = priors
+            self.i = 0
+
+        def __call__(self, *args, **kwargs) -> GPPrior:
+            prior = self.priors[self.i]
+            self.i = (self.i + 1) % K
+            return prior
+
+    OU_prior_gens = [fixed_prior_generator(priors) for priors in OU_priors]
+    OUosc_prior_gens = [fixed_prior_generator(priors) for priors in OUosc_priors]
+
+    return OU_prior_gens, OUosc_prior_gens
+
+
+# their notebook
+def original_analysis(
+    path: str,
+    OU_prior_gens: List[backend.GPPriorFactory],
+    OUosc_prior_gens: List[backend.GPPriorFactory],
+    K: int,
+):
+    # ----------------- #
+    # --- LOAD DATA --- #
+    # ----------------- #
+    def load_data(file_name):
+        df = pd.read_csv(file_name).fillna(0)
+        data_cols = [col for col in df if col.startswith("Cell")]  # type: ignore
+        bckgd_cols = [col for col in df if col.startswith("Background")]  # type: ignore
+        time = df["Time (h)"].values[:, None]
+
+        bckgd = df[bckgd_cols].values
+        M = np.shape(bckgd)[1]
+
+        bckgd_length = np.zeros(M, dtype=np.int32)
+
+        for i in range(M):
+            bckgd_curr = bckgd[:, i]
+            bckgd_length[i] = np.max(np.nonzero(bckgd_curr)) + 1
+
+        y_all = df[data_cols].values
+
+        N = np.shape(y_all)[1]
+
+        y_all = df[data_cols].values
+        np.max(np.nonzero(y_all))
+
+        y_length = np.zeros(N, dtype=np.int32)
+
+        for i in range(N):
+            y_curr = y_all[:, i]
+            y_length[i] = np.max(np.nonzero(y_curr)) + 1
+
+        return time, bckgd, bckgd_length, M, y_all, y_length, N
+
+    time, bckgd, bckgd_length, M, y_all, y_length, N = load_data(path)
+
+    # ------------------------ #
+    # --- BACKGROUND MODEL --- #
+    # ------------------------ #
+
+    def optimised_background_model(X, Y):
+        k = gpflow.kernels.SquaredExponential()
+        m = gpflow.models.GPR(data=(X, Y), kernel=k, mean_function=None)
+        m.kernel.lengthscales = gpflow.Parameter(
+            to_default_float(7.1),
+            transform=tfp.bijectors.Softplus(low=to_default_float(7.0)),
+        )
+        opt = gpflow.optimizers.Scipy()
+        opt.minimize(
+            m.training_loss,
+            m.trainable_variables,  # type: ignore
+            options=dict(maxiter=100),
+        )
+
+        return m
+
+    std_vec = np.zeros(M)
+
+    for i in range(M):
+        # was not the same as above
+        X = time[: bckgd_length[i]]
+        Y = bckgd[: bckgd_length[i], i, None]
+        Y = Y - np.mean(Y)
+
+        m = optimised_background_model(X, Y)
+
+        mean, var = m.predict_y(X)
+
+        std_vec[i] = m.likelihood.variance**0.5  # type: ignore
+    std = np.mean(
+        std_vec
+    )  # the estimated standard deviation of the experimental noise, averaged over all background traces
+    print(f"Notebook: {std}, {std_vec}\n\n")
+
+    # ------------------ #
+    # --- DETRENDING --- #
+    # ------------------ #
+
+    def detrend_cell(X, Y, detrend_lengthscale):
+        k_trend = gpflow.kernels.SquaredExponential()
+        m = gpflow.models.GPR(data=(X, Y), kernel=k_trend, mean_function=None)
+
+        m.kernel.lengthscales = gpflow.Parameter(
+            to_default_float(detrend_lengthscale + 0.1),
+            transform=tfp.bijectors.Softplus(low=to_default_float(detrend_lengthscale)),
+        )
+
+        opt = gpflow.optimizers.Scipy()
+        opt.minimize(m.training_loss, m.trainable_variables, options=dict(maxiter=100))  # type: ignore
+
+        mean, var = m.predict_f(X)
+
+        Y_detrended = Y - mean
+        Y_detrended = Y_detrended - np.mean(Y_detrended)
+
+        return k_trend, mean, var, Y_detrended
+
+    # ------------------------------- #
+    # --- FIT OU AND OUOSC MODELS --- #
+    # ------------------------------- #
+
+    def fit_models(X, Y, noise, K, OU_prior_gen, OUosc_prior_gen):
+        OU_LL_list, OU_param_list, OUosc_LL_list, OUosc_param_list = [
+            [] for _ in range(4)
+        ]
+
+        for k in range(K):
+            # setup OU model
+            k_ou = gpflow.kernels.Matern12()
+            m = gpflow.models.GPR(data=(X, Y), kernel=k_ou, mean_function=None)
+
+            # get priors
+            OU_priors = OU_prior_gen()
+
+            # assign priors and run
+            m.kernel.variance.assign(OU_priors["kernel.variance"])  # type: ignore
+            m.kernel.lengthscales.assign(OU_priors["kernel.lengthscales"])  # type: ignore
+            m.likelihood.variance.assign(OU_priors["likelihood.variance"])  # type: ignore
+            gpflow.set_trainable(m.likelihood.variance, False)  # type: ignore
+            opt = gpflow.optimizers.Scipy()
+            opt.minimize(
+                m.training_loss,
+                m.trainable_variables,  # type: ignore
+                options=dict(maxiter=100),
+            )
+
+            # extract
+            nlmlOU = m.log_posterior_density()
+            OU_LL = nlmlOU
+            OU_LL_list.append(OU_LL)
+            OU_param_list.append(k_ou)
+
+            # setup OUosc model
+            k_ou_osc = gpflow.kernels.Matern12() * gpflow.kernels.Cosine()
+            m = gpflow.models.GPR(data=(X, Y), kernel=k_ou_osc, mean_function=None)
+
+            # get priors
+            OUosc_priors = OUosc_prior_gen()
+
+            # assign priors and run
+            m.kernel.kernels[0].variance.assign(  # type: ignore
+                OUosc_priors["kernel.kernels[0].variance"]
+            )
+            m.kernel.kernels[0].lengthscales.assign(  # type: ignore
+                OUosc_priors["kernel.kernels[0].lengthscales"]
+            )
+            m.kernel.kernels[1].lengthscales.assign(  # type: ignore
+                OUosc_priors["kernel.kernels[1].lengthscales"]
+            )
+            m.likelihood.variance.assign(OUosc_priors["likelihood.variance"])  # type: ignore
+            gpflow.set_trainable(m.likelihood.variance, False)  # type: ignore
+            gpflow.set_trainable(m.kernel.kernels[1].variance, False)  # type: ignore
+            opt = gpflow.optimizers.Scipy()
+            opt.minimize(
+                m.training_loss,
+                m.trainable_variables,  # type: ignore
+                options=dict(maxiter=100),
+            )
+
+            # extract
+            nlmlOSC = m.log_posterior_density()  # opt_logs.fun
+            OU_osc_LL = nlmlOSC
+            OUosc_LL_list.append(OU_osc_LL)
+            OUosc_param_list.append(k_ou_osc)
+
+        LLR = 100 * 2 * (np.max(OUosc_LL_list) - np.max(OU_LL_list)) / len(Y)
+        BIC_OUosc = -2 * np.max(OUosc_LL_list) + 3 * np.log(len(Y))
+        BIC_OU = -2 * np.max(OU_LL_list) + 2 * np.log(len(Y))
+        BICdiff = BIC_OU - BIC_OUosc
+        k_ou = OU_param_list[np.argmax(OU_LL_list)]
+        k_ou_osc = OUosc_param_list[np.argmax(OUosc_LL_list)]
+
+        return LLR, BICdiff, k_ou, k_ou_osc
+
+    (
+        noise_list,
+        detrend_param_list,
+        LLR_list,
+        BICdiff_list,
+        OU_param_list,
+        OUosc_param_list,
+    ) = [[] for _ in range(6)]
+
+    for cell in range(N):
+        x_curr = time[: y_length[cell]]
+        y_curr = y_all[: y_length[cell], cell, None]
+
+        # debug prints to show if the data has been loaded correctly
+        # print(cell)
+        # print(y_curr[-1], " final value in y_curr")
+        # print(y_all[: y_length[cell] + 1, cell, None][-5:], " last 5 values of y_all")
+
+        noise = std / np.std(y_curr)
+        y_curr = (y_curr - np.mean(y_curr)) / np.std(y_curr)
+
+        k_trend, mean_trend, var_trend, Y_detrended = detrend_cell(x_curr, y_curr, 7.0)
+
+        LLR, BICdiff, k_ou, k_ou_osc = fit_models(
+            x_curr, Y_detrended, noise, K, OU_prior_gens[cell], OUosc_prior_gens[cell]
+        )
+
+        noise_list.append(noise)
+        detrend_param_list.append(k_trend)
+        LLR_list.append(LLR)
+        BICdiff_list.append(BICdiff)
+        OU_param_list.append(k_ou)
+        OUosc_param_list.append(k_ou_osc)
+
+    cutoff = 3
+    print(
+        "Number of cells counted as oscillatory (Notebook): {0}/{1}".format(
+            sum(np.array(BICdiff_list) > cutoff), len(BICdiff_list)
+        )
+    )
+
+    return (
+        noise_list,
+        detrend_param_list,
+        LLR_list,
+        BICdiff_list,
+        OU_param_list,
+        OUosc_param_list,
+    )
+
+
+class TestCorrectness(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        super().setUpClass()
+        cls.path = "data/hes/Hes1_example.csv"
+
+        # read in data
+        cls.X, cls.Y = utils.load_data(cls.path, "Time (h)", "Cell")
+        cls.X_bckgd, cls.bckgd = utils.load_data(cls.path, "Time (h)", "Background")
+        cls.N, cls.M = len(cls.Y), len(cls.bckgd)
+        cls.K = 10
+
+        # calculate background noise
+        print("Calculating background noise\n")
+        cls.mean_noise, cls.bckgd_GPs = utils.background_noise(
+            cls.X_bckgd, cls.bckgd, 7.0
+        )
+        cls.noise_list = [cls.mean_noise / np.std(y) for y in cls.Y]
+        print(f"GPCell: {cls.mean_noise}, {[float(gp.noise) for gp in cls.bckgd_GPs]}")
+
+        # generate priors
+        cls.OU_prior_gens, cls.OUosc_prior_gens = generate_prior_data(
+            cls.N, cls.noise_list, 5
+        )
+
+        # run the original analysis
+        (
+            cls.notebook_noise_list,
+            detrend_param_list,
+            LLR_list,
+            BICdiff_list,
+            OU_param_list,
+            OUosc_param_list,
+        ) = original_analysis(cls.path, cls.OU_prior_gens, cls.OUosc_prior_gens, cls.K)
+
+        # run the GPCell analysis
+        params = {
+            "verbose": False,
+            "joblib": True,
+            "set_noise": cls.mean_noise,
+            "ou_prior_gen": cls.OU_prior_gens,
+            "ouosc_prior_gen": cls.OUosc_prior_gens,
+        }
+        cls.detector = gc.OscillatorDetector(cls.X, cls.Y, cls.N, **params)
+        cls.detector.fit(methods=["BIC"])
+
+    def test_noise(self):
+        # check if the results are the same
+        self.assertTrue(np.allclose(self.notebook_noise_list, self.noise_list))

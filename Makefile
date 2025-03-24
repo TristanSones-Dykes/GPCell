@@ -26,6 +26,9 @@ help:
 	@echo "  make run_test TEST_CLASS=<TestClassName>"
 	@echo "    - Runs the specified test class using Python unittest"
 
+correctness_test:
+	@echo "Running correctness tests"
+	@python -m unittest tests.correctness
 
 # Perform all administrative tasks
 admin_tasks:

@@ -84,7 +84,7 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         Test the background noise value calculation with real data.
         """
         self.assertIsNotNone(self.detector.mean_noise)
-        self.assertGreater(self.detector.mean_noise, 0)
+        self.assertGreater(self.detector.mean_noise, 0)  # type: ignore
         self.assertAlmostEqual(float(self.detector.mean_noise), 7.302221575486058)
 
     def test_BIC_classification(self):
@@ -132,7 +132,7 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
         Test the background noise value calculation with real data.
         """
         self.assertIsNotNone(self.detector.mean_noise)
-        self.assertGreater(self.detector.mean_noise, 0)
+        self.assertGreater(self.detector.mean_noise, 0)  # type: ignore
         self.assertAlmostEqual(float(self.detector.mean_noise), 7.302221575486058)
 
     def test_BIC_classification(self):
