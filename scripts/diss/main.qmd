@@ -1,0 +1,70 @@
+---
+# basic details
+title: "GPCell: A Performant Framework for Gaussian Processes in Bioinformatics"
+author: Tristan Sones-Dykes
+date: "24 March 2025"
+
+# citations
+bibliography: references.bib
+csl: imaa.csl
+
+# global formatting
+mainfont: "EB Garamond"
+monofont: FiraCode-Medium
+toc: true
+toc-depth: 3
+toc-title: "Table of contents"
+lof: true
+lot: true
+number-sections: true
+number-depth: 2
+
+# output-specific
+format:
+  html: default
+  pdf:
+    documentclass: scrreprt
+    keep-tex: true
+    papersize: a4
+    geometry:
+      - inner=3cm
+      - outer=4cm
+      - top=3cm
+      - bottom=4cm
+      - headsep=22pt
+      - headheight=11pt
+      - footskip=33pt
+      - ignorehead
+      - ignorefoot
+      - heightrounded
+
+# envs
+jupyter: python3
+---
+
+# Abstract
+
+Gene expression regulation is pivotal in cellular function, with significant advancements since the 1960s. Notably, Jacob and Monod's work elucidated gene activation mechanisms in response to external stimuli via mRNA transcription modulation [@jacob_genetic_1961]. Subsequent research, such as @hardin_feedback_1990's study on circadian rhythms in *Drosophila melanogaster*, highlighted oscillatory gene expression through protein-mediated RNA inhibition. Building upon these foundations, @phillips_identifying_2017 investigated gene expression patterns in neural progenitor cells, identifying correlations between oscillatory behavior and differentiation. Their methodology employed Gaussian processes to classify gene expression time series using MATLAB.
+
+This dissertation extends their approach by developing a Python library that facilitates Gaussian process fitting and oscillation detection across diverse datasets. Enhancements include an extensible modelling framework, allowing for the easy addition of fitting techniques like MCMC; being based coherently on top of Tensorflow Probability, taking advantage of computational advancements and giving access to a suite of priors, model types, and optimisers; and an automated Continuous Integration/Continuous Deployment (CI/CD) pipeline, with accuracy tests for models and automatically generated docs [@gpcell_docs].\
+Future works can now prioritise scientific discovery and model choice, using a suite of utilities that simplify the model-fitting process.
+
+# Introduction
+
+The regulation of gene expression is fundamental to cellular processes, dictating how genes are activated or repressed in response to various stimuli. A landmark discovery by Jacob and Monod in the 1960s [@jacob_genetic_1961] demonstrated that genes could be switched on or off through the modulation of mRNA transcription, a mechanism that garnered them the Nobel Prize. While their research provided insights into gene regulation mechanisms, it did not delve into the temporal dynamics of gene expression.​
+
+In the 1980s, research into the temporal aspects of gene expression gained momentum. @hardin_feedback_1990 proposed the Transcription Translation Negative Feedback Loop to explain circadian rhythms in Drosophila melanogaster. They discovered that certain genes exhibited oscillatory behavior, regulated by proteins that inhibited their own RNA production, thereby establishing a feedback loop.​
+
+Furthering this line of inquiry, @phillips_identifying_2017 explored gene expression patterns in neural progenitor cells, revealing that such expression could be either oscillatory or aperiodic. Notably, oscillatory expression was associated with cellular differentiation. Their methodology involved fitting both oscillating and non-oscillating Gaussian processes to gene expression time series data, enabling the classification of genes based on their oscillatory behavior. However, their approach was primarily applied within a specific biological context, limiting its generalizability.​
+
+This dissertation aims to broaden the applicability of Phillips et al.'s methodology by developing a testable and extensible Python library. This library is designed to facilitate model-fitting and oscillation detection across various datasets and experimental conditions. Utilizing the GPflow library, which is based on TensorFlow, it provides a user-friendly interface for researchers. Planned enhancements include incorporating Bayesian inference techniques and change-point detection methods to improve the model's robustness and adaptability. Additionally, computational optimizations will be explored to ensure efficient performance, aligning with project timelines and objectives.
+
+# References {.unnumbered}
+
+\begingroup
+\raggedright
+
+::: {#refs}
+:::
+
+\endgroup
