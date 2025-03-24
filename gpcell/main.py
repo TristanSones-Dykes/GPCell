@@ -325,7 +325,7 @@ class OscillatorDetector:
             print("Fitting BIC...")
 
         # fit OU and OU+Oscillator models
-        self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
+        ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
             self.X,
             self.Y_detrended,
             ou_priors,
@@ -342,9 +342,7 @@ class OscillatorDetector:
             self.k_ou_list,
             self.k_ouosc_list,
             self.periods,
-        ) = self._calc_gpr_bic_llr(
-            self.X, self.Y_detrended, self.ou_GPs, self.ouosc_GPs
-        )
+        ) = self._calc_gpr_bic_llr(self.X, self.Y_detrended, ou_GPs, ouosc_GPs)
 
         if self.verbose:
             print(
