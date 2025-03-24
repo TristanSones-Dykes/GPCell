@@ -226,6 +226,10 @@ class OscillatorDetector:
                             partial(prior, noise)
                             for prior, noise in zip(self.ou_prior, self.noise_list)
                         ]
+                    case _:
+                        raise ValueError(
+                            "ou_prior must be a callable or list of callables"
+                        )
 
                 match self.ouosc_prior:
                     case Callable():
@@ -238,6 +242,10 @@ class OscillatorDetector:
                             partial(prior, noise)
                             for prior, noise in zip(self.ouosc_prior, self.noise_list)
                         ]
+                    case _:
+                        raise ValueError(
+                            "ouosc_prior must be a callable or list of callables"
+                        )
             case False:
                 ou_priors = [
                     lambda noise=noise: {
@@ -360,7 +368,7 @@ class OscillatorDetector:
     ):
         # --- classification using synthetic cells --- #
         if self.verbose:
-            print("Fitting syntheic cells...")
+            print("Fitting synthetic cells...")
 
         # extract kwargs
         set_noise = kwargs.get("set_noise", None)
