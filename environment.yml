@@ -16,3 +16,4 @@ dependencies:
   - numba
   - joblib
   - astropy
+  - ruff
