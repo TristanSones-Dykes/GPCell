@@ -1,6 +1,7 @@
 # GPcell ignores
 docs/
 data/simulation/
+temp/*
 
 # macos
 */.DS_Store

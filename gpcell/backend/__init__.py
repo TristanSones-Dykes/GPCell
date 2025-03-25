@@ -68,8 +68,11 @@ def _joblib_fit_memmap_worker(
     List[GaussianProcess]
         List of fitted GP models.
     """
+    # extract the data
     x = X[i]
-    y = Y[:, i]
+    y = Y[i, :]
+
+    # fit the models
     models = []
     for _ in range(replicates):
         gp_model = GaussianProcess(constructor)
@@ -112,11 +115,11 @@ def _joblib_nonhomog_fit_memmap_worker(
     List[GaussianProcess]
         List of fitted GP models.
     """
-    # Get the corresponding x and padded y.
+    # extract the data, using passed true length
     x = X[i]
-    y_padded = Y[i]
-    # Slice the memmapped array using the original length for this cell.
-    y = y_padded[:true_length]
+    y = Y[i, :true_length]
+
+    # fit the models
     models = []
     for _ in range(replicates):
         gp_model = GaussianProcess(constructor)

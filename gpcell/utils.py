@@ -291,7 +291,7 @@ def fit_processes_joblib(
         results: List[List[GaussianProcess]] = Parallel(
             n_jobs=14,
             backend="loky",
-            verbose=1 if verbose else 0,
+            verbose=int(verbose),
         )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
 
         return results
@@ -304,7 +304,7 @@ def fit_processes_joblib(
     # two branches for large or homogenous traces
     if is_homogeneous:
         # stack traces
-        Y_mat = np.stack(Y_preprocessed, axis=1)
+        Y_mat = np.stack(Y_preprocessed, axis=0)
 
         # create memmap file
         dump(Y_mat, path)
@@ -351,7 +351,7 @@ def fit_processes_joblib(
         backend="loky",
         pre_dispatch=pre_dispatch,
         batch_size=batch_size,  # type: ignore
-        verbose=1 if verbose else 0,
+        verbose=int(verbose),
     )(delayed_calls)
 
     # Clean up memmap file.
@@ -360,194 +360,6 @@ def fit_processes_joblib(
         get_reusable_executor().shutdown(wait=True)
 
     return results
-
-
-# def fit_processes_joblib(
-#     X: Sequence[Ndarray],
-#     Y: Sequence[Ndarray],
-#     kernels: GPKernel,
-#     prior_gen: Union[GPPriorFactory, Sequence[GPPriorFactory]],
-#     replicates: int = 1,
-#     trainable: GPPriorTrainingFlag = {},
-#     operator: Optional[GPOperator] = operator.mul,
-#     preprocess: int = 0,
-#     mcmc: bool = False,
-#     Y_var: bool = False,
-#     verbose: bool = False,
-# ) -> List[List[GaussianProcess]]:
-#     """
-#     Fit Gaussian Processes to the data in parallel using Joblib.
-
-#     N traces and M replicates will result in N * M models.
-#     This version groups the replicates by cell: each job fits all replicates for one cell,
-#     thereby reducing data copying overhead.
-
-#     Parameters
-#     ----------
-#     X : Sequence[Ndarray]
-#         List of input domains (one per cell).
-#     Y : Sequence[Ndarray]
-#         List of input traces (one per cell).
-#     kernels : GPKernel
-#         Kernel (or list of kernels) for the GP model.
-#     prior_gen : GPPriorFactory or Sequence[GPPriorFactory]
-#         A callable (or list of callables) that generate the priors for each model.
-#     replicates : int, optional
-#         Number of replicates to fit per cell (default is 1).
-#     trainable : GPPriorTrainingFlag, optional
-#         Dictionary to set which parameters are trainable (default is {}).
-#     operator : Optional[GPOperator], optional
-#         Operator to combine kernels (defaults to multiplication if not provided).
-#     preprocess : int, optional
-#         0: no preprocessing; 1: centre the trace; 2: standardise the trace (default is 0).
-#     mcmc : bool, optional
-#         Whether to use MCMC for inference (default is False).
-#     Y_var : bool, optional
-#         Whether to calculate variance of missing data (default is False).
-#     verbose : bool, optional
-#         If True, prints information during fitting (default is False).
-
-#     Returns
-#     -------
-#     List[List[GaussianProcess]]
-#         A list (one per cell) of lists of fitted GP models (one per replicate).
-#     """
-#     # Determine the constructors for each trace.
-#     if callable(prior_gen):
-#         constructors = [
-#             GPRConstructor(kernels, prior_gen, trainable, operator, mcmc=mcmc)
-#             for _ in Y
-#         ]
-#     else:
-#         if len(prior_gen) != len(Y):
-#             raise ValueError(
-#                 f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
-#             )
-#         constructors = [
-#             GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc)
-#             for gen in prior_gen
-#         ]
-
-#     # Preprocess traces
-#     match preprocess:
-#         case 0:
-#             Y_preprocessed = Y
-#         case 1:
-#             Y_preprocessed = [(y - mean(y)) for y in Y]
-#         case 2:
-#             Y_preprocessed = [(y - mean(y)) / std(y) for y in Y]
-#         case _:
-#             raise ValueError(f"Invalid preprocess option: {preprocess}")
-
-#     # --- IF HOMOGENOUS --- #
-#     # Check if Y is homogeneous (all traces are the same length).
-#     if all(len(y) == len(Y[0]) for y in Y):
-#         # set number of cores used and job batches pre-dispatched
-#         n_jobs = 14
-#         pre_dispatch = "all"
-#         batch_size = "auto"
-
-#         # create homogenous matrix of traces
-#         Y_mat = np.stack(Y_preprocessed, axis=1)
-
-#         # dump to memmap file
-#         folder = "./temp"
-#         os.makedirs(folder, exist_ok=True)
-#         path = os.path.join(folder, "Y_memmap")
-#         dump(Y_mat, path)
-
-#         # load memmap file and delete matrix
-#         Y_memmap = load(path, mmap_mode="r")
-
-#         # mitigate memory issues
-#         if len(Y) > 4 * n_jobs:
-#             pre_dispatch = "n_jobs"
-#             del Y_mat
-
-#         print(
-#             f"\nHomogenous traces: {len(Y)} cells, pre_dispatch: {pre_dispatch}, batch_size: {batch_size}"
-#         )
-
-#         # run workers
-#         result: List[List[GaussianProcess]] = Parallel(
-#             n_jobs=n_jobs,
-#             backend="loky",
-#             pre_dispatch=pre_dispatch,
-#             batch_size=batch_size,  # type: ignore
-#             # verbose=1,
-#         )(
-#             delayed(_joblib_fit_memmap_worker)(
-#                 i, X, Y_memmap, Y_var, constructors[i], replicates
-#             )
-#             for i in range(len(Y))
-#         )  # type: ignore
-
-#         # Clean up
-#         os.remove(path)
-#         if len(Y) > 4 * n_jobs:
-#             get_reusable_executor().shutdown(wait=True)
-
-#         return result
-#     # --- END --- #
-
-#     # --- IF NON-HOMOGENOUS AND len(Y) < 4 * n_jobs: --- #
-
-#     # Non-homogeneous traces
-#     # Pad Y_proc to a uniform shape.
-#     Y_padded, orig_lengths = pad_traces(Y_preprocessed, pad_value=0)
-
-#     print(f"\nNon-homogenous traces: {len(Y)}")
-
-#     # dump to memmap file
-#     folder = "./temp"
-#     os.makedirs(folder, exist_ok=True)
-#     path = os.path.join(folder, "Y_memmap")
-#     dump(Y_padded, path)
-
-#     # load memmap file and delete matrix
-#     Y_memmap = load(path, mmap_mode="r")
-
-#     # Run the worker function in parallel.
-#     results: List[List[GaussianProcess]] = Parallel(
-#         n_jobs=14,
-#         backend="loky",
-#         verbose=1,
-#     )(
-#         delayed(_joblib_nonhomog_fit_memmap_worker)(
-#             i, X, Y_memmap, Y_var, constructors[i], replicates, orig_lengths[i]
-#         )
-#         for i in range(len(Y))
-#     )  # type: ignore
-
-#     print(isinstance(Y_memmap, np.memmap))
-
-#     # Clean up: remove the memmap file.
-#     os.remove(path)
-#     # --- END --- #
-
-#     return results
-
-#     # --- IF NON-HOMOGENOUS AND len(Y) < 4 * n_jobs: --- #
-#     def joblib_fit_trace_worker(
-#         index: int, constructor: GPRConstructor
-#     ) -> List[GaussianProcess]:
-#         x = X[index]
-#         y = Y_processed[index]
-#         models = []
-#         for _ in range(replicates):
-#             gp_model = GaussianProcess(constructor)
-#             gp_model.fit(x, y, Y_var, verbose)
-#             models.append(gp_model)
-#         return models
-
-#     # Run the worker function in parallel using Joblib.
-#     results: List[List[GaussianProcess]] = Parallel(
-#         n_jobs=11,
-#         backend="loky",  # , verbose=1
-#     )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
-#     # --- END --- #
-
-#     return results
 
 
 def detrend(
@@ -727,23 +539,19 @@ def pad_traces(
 
     Returns
     -------
-    padded : np.ndarray
-        Array of shape (num_traces, max_length, ...) where max_length is the maximum length.
-    orig_lengths : list of int
-        Original lengths of each trace.
+    tuple[np.ndarray, List[int]]
+        Padded traces, original lengths.
     """
-    orig_lengths = [trace.shape[0] for trace in traces]
+    # lengths of each trace and maximum length
+    orig_lengths = [len(trace) for trace in traces]
     max_length = max(orig_lengths)
-    padded = []
-    for trace in traces:
-        # Create pad_width: pad only the first axis
-        pad_width = [(0, max_length - trace.shape[0])]
-        # For any additional dimensions, no padding is needed.
-        for _ in range(1, trace.ndim):
-            pad_width.append((0, 0))
-        padded_trace = pad(trace, pad_width, mode="constant", constant_values=pad_value)
-        padded.append(padded_trace)
-    return np.stack(padded, axis=0), orig_lengths
+
+    # pre-allocate and fill padded array
+    padded = np.full((len(traces), max_length), pad_value)
+    for idx, trace in enumerate(traces):
+        padded[idx, : orig_lengths[idx]] = trace.flatten()
+
+    return padded, orig_lengths
 
 
 def save_sim(X: Ndarray, Y: Sequence[Ndarray], filename: str) -> None:
