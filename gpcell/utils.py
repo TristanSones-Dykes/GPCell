@@ -1,5 +1,4 @@
 # Standard Library Imports
-from functools import partial
 from typing import (
     Iterable,
     List,
@@ -10,8 +9,11 @@ from typing import (
     Union,
     overload,
 )
-import operator
+from functools import partial
 from concurrent.futures import ProcessPoolExecutor, as_completed
+
+import time
+import operator
 import os
 
 # Third-Party Library Imports
@@ -20,6 +22,7 @@ from joblib.externals.loky import get_reusable_executor
 import numpy as np
 import pandas as pd
 import tensorflow_probability as tfp
+import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 from numpy import float64, nonzero, std, mean, max
@@ -274,12 +277,13 @@ def fit_processes_joblib(
 
     # --- Early exit: not homogenous or large --- #
     if not is_homogeneous and not is_large:
+        print(f"\nSmall, non-homogenous traces: {len(Y)} cells")
 
         def joblib_fit_trace_worker(
-            index: int, constructor: GPRConstructor
+            i: int, constructor: GPRConstructor
         ) -> List[GaussianProcess]:
-            x = X[index]
-            y = Y_preprocessed[index]
+            x = X[i]
+            y = Y_preprocessed[i]
             models = []
             for _ in range(replicates):
                 gp_model = GaussianProcess(constructor)
@@ -320,7 +324,7 @@ def fit_processes_joblib(
     # large traces
     else:
         # pad traces
-        Y_mat, orig_lengths = pad_traces(Y_preprocessed, pad_value=0)
+        Y_mat, orig_lengths = pad_traces(Y_preprocessed)
 
         # create memmap file
         dump(Y_mat, path)
@@ -365,6 +369,207 @@ def fit_processes_joblib(
         get_reusable_executor().shutdown(wait=True)
 
     return results
+
+
+def benchmark_memmap_performance(
+    X_list: List[List[Ndarray]],
+    Y_list: List[List[Ndarray]],
+    max_lengths: List[int],
+    num_traces: List[int],
+    kernels: GPKernel,
+    prior_gens: List[GPPriorFactory],
+    trainables: GPPriorTrainingFlag,
+    replicates: int,
+    Y_var: bool,
+    mcmc: bool,
+    operator: GPOperator,
+    verbose: bool,
+    n_jobs: int = -1,
+):
+    """
+    Benchmarks the performance improvement of using padding and memmap based on given simulation parameters.
+    Works with varying-length traces within each group.
+
+    Parameters
+    ----------
+    X_list : List[List[Ndarray]]
+        List of lists of input domains, grouped by maximum length and number of traces.
+    Y_list : List[List[Ndarray]]
+        List of lists of input traces, grouped by maximum length and number of traces.
+    max_lengths : List[int]
+        List of maximum trace lengths.
+    num_traces : List[int]
+        List of number of traces per group.
+    kernels : GPKernel
+        Kernel(s) in the model.
+    prior_gens : List[GPPriorFactory]
+        List of prior generators.
+    trainables : GPPriorTrainingFlag
+        Dictionary to set trainable parameters.
+    replicates : int
+        Number of model replicates.
+    Y_var : bool
+        Calculate variance of missing data.
+    mcmc : bool
+        Whether to use MCMC for inference.
+    operator : GPOperator
+        Operator to combine kernels.
+    verbose : bool
+        Print information.
+    n_jobs : int, optional
+        Number of parallel jobs.
+
+    Returns
+    -------
+    None
+        Plots the heatmap of speed gains.
+    """
+    # Get unique max lengths and trace counts from data structure
+    max_lengths_set = set()
+    num_traces_set = set()
+
+    param_list = []
+
+    for i, (X, Y) in enumerate(zip(X_list, Y_list)):
+        # Calculate which group this belongs to based on the structure of X_list/Y_list
+        length_idx = i // len(num_traces)
+        num_idx = i % len(num_traces)
+
+        max_lengths_set.add(max_lengths[length_idx])
+        num_traces_set.add(num_traces[num_idx])
+
+        param_list.append((max_lengths[length_idx], num_traces[num_idx]))
+
+    print(param_list)
+
+    # Convert to sorted lists
+    max_length_values = sorted(list(max_lengths_set))
+    num_trace_values = sorted(list(num_traces_set))
+
+    # Initialize results matrix
+    speed_gains = np.zeros((len(max_length_values), len(num_trace_values)))
+
+    # --- Process each combination --- #
+    print(f"\nNaive model fitting: {len(X_list)} groups")
+    for i, (X, Y) in enumerate(zip(X_list, Y_list)):
+        max_length, N = param_list[i]
+
+        # Create constructors for this group
+        constructors = [
+            GPRConstructor(
+                kernels,
+                prior_gen,
+                trainables,
+                operator,
+                mcmc=mcmc,
+            )
+            for prior_gen in prior_gens[:N]
+        ]
+
+        # --- Without padding/memmap --- #
+        start = time.time()
+
+        # Time includes method specific setup (def functions or make memmap)
+        def joblib_fit_trace_worker(
+            i: int, constructor: GPRConstructor
+        ) -> List[GaussianProcess]:
+            x = X[i]
+            y = Y[i]
+            models = []
+            for _ in range(replicates):
+                gp_model = GaussianProcess(constructor)
+                gp_model.fit(x, y)
+                models.append(gp_model)
+            return models
+
+        Parallel(
+            n_jobs=n_jobs,
+            backend="loky",
+        )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(N))
+
+        time_no_memmap = time.time() - start
+        print(
+            f"Max length: {max_length}, Number of traces: {N}, Naive Time: {time_no_memmap}"
+        )
+
+        # Destroy workers
+        get_reusable_executor().shutdown(wait=True)
+
+    # --- With padding/memmap --- #
+    print(f"\nMemmap model fitting: {len(X_list)} groups")
+    for i, (X, Y) in enumerate(zip(X_list, Y_list)):
+        max_length, N = param_list[i]
+
+        start = time.time()
+
+        # Create memmap dir
+        folder = "./temp"
+        os.makedirs(folder, exist_ok=True)
+        path = os.path.join(folder, "Y_memmap")
+        os.remove(path) if os.path.exists(path) else None  # remove if exists
+
+        # Pad traces
+        Y_mat, orig_lengths = pad_traces(Y)
+
+        # Create memmap file
+        dump(Y_mat, path)
+        del Y_mat
+        Y_memmap = load(path, mmap_mode="r")
+
+        # Run workers with original lengths
+        Parallel(
+            n_jobs=n_jobs,
+            backend="loky",
+            pre_dispatch="n_jobs",
+            batch_size="auto",
+        )(
+            delayed(_joblib_nonhomog_fit_memmap_worker)(
+                i, X, Y_memmap, Y_var, constructors[i], replicates, orig_lengths[i]
+            )
+            for i in range(N)
+        )
+
+        # Clean up memmap file
+        os.remove(path)
+
+        time_with_memmap = time.time() - start
+        print(
+            f"Max length: {max_length}, Number of traces: {N}, Memmap Time: {time_with_memmap}"
+        )
+
+        # Calculate speed gain and store in results matrix
+        row_idx = max_length_values.index(max_length)
+        col_idx = num_trace_values.index(N)
+        speed_gains[row_idx, col_idx] = time_no_memmap / time_with_memmap
+
+        # Destroy workers
+        get_reusable_executor().shutdown(wait=True)
+
+    # Plotting heatmap
+    plt.figure(figsize=(10, 7))
+    plt.imshow(speed_gains, cmap="viridis", interpolation="nearest", aspect="auto")
+    plt.colorbar(label="Speed Gain (No Memmap / With Memmap)")
+    plt.xticks(np.arange(len(num_trace_values)), num_trace_values)
+    plt.yticks(np.arange(len(max_length_values)), max_length_values)
+    plt.xlabel("Number of Traces")
+    plt.ylabel("Maximum Trace Length")
+    plt.title("Speed Gains using Padding and Memmap")
+
+    # Add text annotations with speed gain values
+    for i in range(len(max_length_values)):
+        for j in range(len(num_trace_values)):
+            if speed_gains[i, j] > 0:  # Only annotate non-zero values
+                plt.text(
+                    j,
+                    i,
+                    f"{speed_gains[i, j]:.2f}",
+                    ha="center",
+                    va="center",
+                    color="white" if speed_gains[i, j] < 1.5 else "black",
+                )
+
+    plt.tight_layout()
+    plt.show()
 
 
 def detrend(
@@ -530,7 +735,7 @@ def load_data(
 
 
 def pad_traces(
-    traces: Sequence[Ndarray], pad_value: float = 0
+    traces: Sequence[Ndarray], pad_value: float64 = float64(0)
 ) -> Tuple[Ndarray, List[int]]:
     """
     Pad a list of numpy arrays (each representing a trace) along axis 0 to a uniform length.
@@ -551,15 +756,16 @@ def pad_traces(
     orig_lengths = [trace.shape[0] for trace in traces]
     max_length = max(orig_lengths)
 
-    # pre-allocate and fill padded array
-    padded = np.full((len(traces), max_length), pad_value)
+    # Always explicitly handle 2D shape: (num_traces, max_length, 1)
+    padded = np.full((len(traces), max_length, 1), pad_value, dtype=float64)
+
     for idx, trace in enumerate(traces):
-        if trace.ndim > 1:
-            padded[idx, : orig_lengths[idx]] = trace[
-                :, 0
-            ]  # explicitly handling 2D arrays
+        if trace.ndim == 1:
+            padded[idx, : orig_lengths[idx], 0] = trace
         else:
-            padded[idx, : orig_lengths[idx]] = trace
+            padded[idx, : orig_lengths[idx], :] = (
+                trace  # preserves full 2D data correctly
+            )
 
     return padded, orig_lengths
 
