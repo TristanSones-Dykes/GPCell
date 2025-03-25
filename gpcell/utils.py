@@ -248,7 +248,7 @@ def fit_processes_joblib(
 
     # Check if Y is homogeneous (all traces are the same length).
     if all(len(y) == len(Y[0]) for y in Y):
-        print("Homogeneous traces")
+        # print("Homogeneous traces")
         Y_mat = np.stack(Y, axis=1)
         folder = "./temp"
         os.makedirs(folder, exist_ok=True)
@@ -258,7 +258,7 @@ def fit_processes_joblib(
         Y_processed = load(path, mmap_mode="r")
 
         result: List[List[GaussianProcess]] = Parallel(
-            n_jobs=-1, backend="loky", verbose=1
+            n_jobs=12, backend="loky", verbose=0
         )(
             delayed(_joblib_fit_memmap_worker)(
                 i, X, Y_processed, Y_var, constructors[i], replicates
@@ -295,7 +295,8 @@ def fit_processes_joblib(
 
     # Run the worker function in parallel using Joblib.
     results: List[List[GaussianProcess]] = Parallel(
-        n_jobs=-1, backend="loky", verbose=1
+        n_jobs=11,
+        backend="loky",  # , verbose=1
     )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
     return results
 
@@ -729,7 +730,12 @@ def get_time_series(
     processed_list = []
     for y1 in sim_list:
         # Normalize the data.
-        y_normal = (y1 - np.mean(y1)) / np.std(y1)
+        y_centred = y1 - mean(y1)
+        y_std = std(y_centred)
+        if y_std == 0:
+            y_std = 1
+
+        y_normal = y_centred / y_std
 
         # Add noise.
         SIGMA = np.diag((noise**2) * np.ones(samp))

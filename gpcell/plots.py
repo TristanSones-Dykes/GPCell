@@ -144,6 +144,7 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
+    ax3.margins(x=0, y=0)
 
     # Subplot D: Experiment 2, first timeseries.
     ax4 = plt.subplot(3, 3, 4)
@@ -205,6 +206,7 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
+    ax6.margins(x=0, y=0)
 
     # Subplot G: Experiment 3, first timeseries.
     ax7 = plt.subplot(3, 3, 7)
@@ -266,6 +268,7 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
+    ax9.margins(x=0, y=0)
 
     plt.tight_layout()
     plt.show()
@@ -355,7 +358,7 @@ def compute_rocs_from_file(
         # For each signal in dataTOT:
         for j, y in enumerate(y_list):
             ls = LombScargle(x, y, normalization="standard")
-            freq, power = ls.autopower()
+            freq, power = ls.autopower(minimum_frequency=0.1, maximum_frequency=10)
             p_vals = ls.false_alarm_probability(power)
             beatvec[j] = int(np.any(p_vals < thr))
 
