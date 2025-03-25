@@ -350,7 +350,7 @@ class OscillatorDetector:
 
         if self.verbose:
             print(
-                "Number of cells counted as oscillatory (BIC method): {0}/{1}".format(
+                "\nNumber of cells counted as oscillatory (BIC method): {0}/{1}".format(
                     sum(array(self.BIC_diffs) > 3), len(self.BIC_diffs)
                 )
             )
@@ -380,6 +380,64 @@ class OscillatorDetector:
         K = 10
         self.synth_LLRs = []
         detrend_kernels = [GP_d.fit_gp.kernel for GP_d in self.detrend_GPs]
+
+        # # Prepare lists to hold all synthetic data and corresponding prior generators.
+        # all_X = []  # List of input domains (one per synthetic cell)
+        # all_Y = []  # List of detrended traces for synthetic cells
+        # all_ou_prior = []  # Prior generator for OU model for each synthetic cell
+        # all_ouosc_prior = []  # Prior generator for OU+Oscillator model for each synthetic cell
+
+        # # Loop over each original cell to simulate synthetic cells.
+        # for i in range(self.N):
+        #     X_i = self.X[i]
+        #     # set noise for automated testing
+        #     noise = set_noise if set_noise is not None else self.noise_list[i]
+
+        #     # Configure the synthetic cell kernel:
+        #     k_se = detrend_kernels[i]
+        #     k_ou = self.k_ou_list[i]
+        #     k_white = White(variance=noise**2)  # type: ignore
+        #     k_synth = k_se + k_ou + k_white
+
+        #     # Generate K synthetic cells for this original cell.
+        #     synths = [
+        #         multivariate_normal(zeros(len(X_i)), k_synth(X_i)).reshape(-1, 1)
+        #         for _ in range(K)
+        #     ]
+        #     # Detrend the synthetic traces.
+        #     synths_detrended, _ = detrend([X_i for _ in range(K)], synths, 7.0)
+
+        #     # For each synthetic replicate, add the same X, and the corresponding detrended trace.
+        #     # Also, for each replicate, record the corresponding OU and OU+Oscillator prior generators
+        #     # (which come from ou_priors[i] and ouosc_priors[i]).
+        #     all_X.extend([X_i for _ in range(K)])
+        #     all_Y.extend(synths_detrended)
+        #     all_ou_prior.extend([ou_priors[i]] * K)
+        #     all_ouosc_prior.extend([ouosc_priors[i]] * K)
+
+        # total_replicates = len(all_X)  # should equal self.N * K
+        # if self.verbose:
+        #     print(
+        #         "Fitting OU and OU+Oscillator models for {} synthetic cells in one Parallel call...".format(
+        #             total_replicates
+        #         )
+        #     )
+
+        # # Now call _fit_ou_ouosc on the combined synthetic dataset.
+        # # This method is expected to dispatch fitting jobs (via joblib) across all synthetic cells.
+        # ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
+        #     all_X,
+        #     all_Y,
+        #     all_ou_prior,
+        #     ou_trainables,
+        #     all_ouosc_prior,
+        #     ouosc_trainables,
+        #     total_replicates,
+        # )
+
+        # # Calculate LLR for each synthetic cell.
+        # LLRs, _, _, _, _ = self._calc_gpr_bic_llr(all_X, all_Y, ou_GPs, ouosc_GPs)
+        # self.synth_LLRs = LLRs
 
         # for each cell, make K synthetic cells
         for i in range(self.N):
@@ -541,6 +599,7 @@ class OscillatorDetector:
                     replicates=K,
                     trainable=ou_trainables,
                     mcmc=mcmc,
+                    verbose=self.verbose,
                 )
                 ouosc_GPs = fit_processes_joblib(
                     X,
@@ -550,6 +609,7 @@ class OscillatorDetector:
                     replicates=K,
                     trainable=ouosc_trainables,
                     mcmc=mcmc,
+                    verbose=self.verbose,
                 )
             case False:
                 ou_GPs = fit_processes(

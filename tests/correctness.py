@@ -345,7 +345,7 @@ class TestCorrectness(unittest.TestCase):
 
         # run the GPCell analysis
         params = {
-            "verbose": False,
+            "verbose": True,
             "joblib": True,
             "set_noise": cls.mean_noise,
             "ou_prior_gen": cls.OU_prior_gens,
