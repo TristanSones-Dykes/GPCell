@@ -335,6 +335,11 @@ def fit_processes_joblib(
         )
         n_jobs = 11
 
+    # assert dimensions
+    assert all(X[i].shape[0] == Y_mat.shape[1] for i in range(len(X))), (
+        "Mismatch between X and stacked Y dimensions!"
+    )
+
     # mitigate memory issues
     if is_large:
         pre_dispatch = "n_jobs"
@@ -543,13 +548,18 @@ def pad_traces(
         Padded traces, original lengths.
     """
     # lengths of each trace and maximum length
-    orig_lengths = [len(trace) for trace in traces]
+    orig_lengths = [trace.shape[0] for trace in traces]
     max_length = max(orig_lengths)
 
     # pre-allocate and fill padded array
     padded = np.full((len(traces), max_length), pad_value)
     for idx, trace in enumerate(traces):
-        padded[idx, : orig_lengths[idx]] = trace.flatten()
+        if trace.ndim > 1:
+            padded[idx, : orig_lengths[idx]] = trace[
+                :, 0
+            ]  # explicitly handling 2D arrays
+        else:
+            padded[idx, : orig_lengths[idx]] = trace
 
     return padded, orig_lengths
 
