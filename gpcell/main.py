@@ -64,9 +64,12 @@ class OscillatorDetector:
             "ou_trainables": ou_trainables,
             "ouosc_trainables": ouosc_trainables,
         }
+        print("\nStarting Oscillator Detector...\n")
         for key, value in default_kwargs.items():
             if key not in kwargs:
                 kwargs[key] = value
+            else:
+                print(f"Overriding default value for {key}")
 
         # unpack arguments
         self.verbose = kwargs["verbose"]
@@ -100,18 +103,19 @@ class OscillatorDetector:
         if self.verbose:
             if self.set_noise is None:
                 print(
-                    f"Loaded data with {self.N} cells and {self.M} background noise models"
+                    f"\nLoaded data with {self.N} cells and {self.M} background noise models"
                 )
             else:
-                print(f"Loaded data with {self.N} cells, noise set to {self.set_noise}")
+                print(
+                    f"\nLoaded data with {self.N} cells, noise set to {self.set_noise}"
+                )
 
             print(f"Plots: {'on' if self.plots else 'off'}")
-            print("\n")
 
         # preprocessing
         # --- background noise --- #
         if self.set_noise is None:
-            print("Fitting background noise...")
+            print("\nFitting background noise...")
             self.mean_noise, self.bckgd_GPs = background_noise(
                 self.X_bckgd, self.bckgd, 7.0, verbose=self.verbose
             )
@@ -322,7 +326,7 @@ class OscillatorDetector:
         """
         # --- classify using BIC --- #
         if self.verbose:
-            print("Fitting BIC...")
+            print("\nFitting BIC...")
 
         # fit OU and OU+Oscillator models
         ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
@@ -368,7 +372,7 @@ class OscillatorDetector:
     ):
         # --- classification using synthetic cells --- #
         if self.verbose:
-            print("Fitting synthetic cells...")
+            print(f"\nGenerating synthetic data for {self.N} cells...")
 
         # extract kwargs
         set_noise = kwargs.get("set_noise", None)
@@ -418,7 +422,8 @@ class OscillatorDetector:
 
             self.synth_LLRs.extend(LLRs)
 
-        self.generate_plot("LLR")
+        if "LLR" in self.plots:
+            self.generate_plot("LLR")
 
         # --- classification --- #
 
@@ -493,7 +498,7 @@ class OscillatorDetector:
     ):
         # --- fit GPs using MCMC and categorise --- #
         if self.verbose:
-            print("Fitting MCMC...")
+            print("\nFitting MCMC...")
 
         # fit OU and OU+Oscillator models
         self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(

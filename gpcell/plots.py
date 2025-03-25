@@ -13,6 +13,7 @@ from astropy.timeseries import LombScargle
 # Internal Project Imports
 from gpcell import OscillatorDetector
 from gpcell.utils import load_sim
+from gpcell.backend.priors import sim_ou_prior, sim_ouosc_prior
 
 
 def plot_rocs_and_timeseries(
@@ -321,6 +322,8 @@ def compute_rocs_from_file(
         "plots": ["BIC"],
         "set_noise": noise,
         "detrend": False,
+        "ou_prior_gen": sim_ou_prior,
+        "ouosc_prior_gen": sim_ouosc_prior,
     }
     od = OscillatorDetector.from_file(filename, "Time", "", "Cell", params=params)
     od.fit("BIC")

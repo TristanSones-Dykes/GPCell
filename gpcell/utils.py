@@ -15,6 +15,7 @@ import os
 
 # Third-Party Library Imports
 from joblib import Parallel, delayed, dump, load
+from joblib.externals.loky import get_reusable_executor
 import numpy as np
 import pandas as pd
 import tensorflow_probability as tfp
@@ -248,17 +249,38 @@ def fit_processes_joblib(
 
     # Check if Y is homogeneous (all traces are the same length).
     if all(len(y) == len(Y[0]) for y in Y):
-        # print("Homogeneous traces")
+        # set number of cores used and job batches pre-dispatched
+        n_jobs = 14
+        pre_dispatch = "all"
+        batch_size = "auto"
+
+        # create homogenous matrix of traces
         Y_mat = np.stack(Y, axis=1)
+
+        # dump to memmap file
         folder = "./temp"
         os.makedirs(folder, exist_ok=True)
-
         path = os.path.join(folder, "Y_memmap")
         dump(Y_mat, path)
+
+        # load memmap file and delete matrix
         Y_processed = load(path, mmap_mode="r")
 
+        # mitigate memory issues
+        if len(Y) > 4 * n_jobs:
+            pre_dispatch = "n_jobs"
+            del Y_mat
+        print(
+            f"\nHomogenous traces: {len(Y)} cells, pre_dispatch: {pre_dispatch}, batch_size: {batch_size}"
+        )
+
+        # run workers
         result: List[List[GaussianProcess]] = Parallel(
-            n_jobs=12, backend="loky", verbose=0
+            n_jobs=n_jobs,
+            backend="loky",
+            pre_dispatch=pre_dispatch,
+            batch_size=batch_size,  # type: ignore
+            # verbose=1,
         )(
             delayed(_joblib_fit_memmap_worker)(
                 i, X, Y_processed, Y_var, constructors[i], replicates
@@ -268,6 +290,8 @@ def fit_processes_joblib(
 
         # Clean up
         os.remove(path)
+        if len(Y) > 4 * n_jobs:
+            get_reusable_executor().shutdown(wait=True)
 
         return result
 
@@ -415,7 +439,7 @@ def background_noise(
     std = mean(std_array)
 
     if verbose:
-        print("\nBackground noise results:")
+        print("Background noise results:")
         print(f"Standard deviation: {std}")
 
     return std, processes
