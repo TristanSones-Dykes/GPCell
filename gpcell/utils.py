@@ -22,7 +22,7 @@ import pandas as pd
 import tensorflow_probability as tfp
 
 # Direct Namespace Imports
-from numpy import float64, nonzero, pad, std, mean, max
+from numpy import float64, nonzero, std, mean, max
 from gpflow import Parameter
 from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
