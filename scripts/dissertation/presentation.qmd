@@ -22,50 +22,52 @@ bibliography: references.bib
 
 - **Historical Foundations**
   - @jacob_genetic_1961: 
-  - @hardin_feedback_1990
-  - @phillips_identifying_2017
+  - @hardin_feedback_1990: Demonstrated feedback mechanisms in gene expression, revealing oscillatory behavior in circadian rhythms.
+  - @phillips_identifying_2017: Applied Gaussian processes to classify gene expression time series in neural progenitor cells, highlighting oscillatory versus aperiodic dynamics.
 - **Introduction to Gaussian Processes**
-  - Non-parametric, probabilistic, and flexible modeling approach
+  - A non-parametric, probabilistic modeling approach that offers flexibility in fitting complex biological signals and quantifying uncertainty.
 
 ## Problem Statement
 
-- **Limitations in Prior Work:**
-  - MATLAB-based approach in @phillips_identifying_2017
-  - Domain-specific application and limited extensibility
-- **The Need for GPCell:**
-  - A general, extensible Python framework for GP fitting and oscillation detection
+- **Biological Background**
+  - Gene expression regulation is central to cellular function and its oscillatory dynamics can indicate critical biological processes such as differentiation.
+- **Current implementation**
+  - MATLAB-based Approach: Previous work relied on MATLAB, limiting accessibility and integration with modern machine learning libraries.
+  - Performance Issues: Traditional implementations faced slow model fitting and lacked support for parallel processing.
+  - Limited Extensibility: The original system was tailored to a specific context and difficult to extend with new inference techniques (e.g., MCMC, Variational Inference).
 
 ## GPCell
 
 - **Overview:**
-  - A Python library built on TensorFlow Probability
+  - A generalised Python library, based on GPflow (Tensorflow Probability), to facilitate model fitting and oscillation detection.
 - **Key Features:**
-  - **OscillatorDetector:** Class for analyzing gene expression oscillations
-  - Extensible framework (e.g., integration of MCMC methods)
-  - Strong type system and automated CI/CD pipeline
-  - Multiprocessing pipeline for improved performance
-- *(Consider adding code snippets or diagrams here)*
+  - **OscillatorDetector:**: A class that handles the entire analysis pipeline (background noise estimation, detrending, and GP model fitting).
+  - Extensible **GaussianProcess** class: Allows for adding different models (e.g., MCMC for probabilistic inference) and various fitting algorithms.
+  - **Utils** module: for fitting models/generating data quickly in parallel.
+  - **Robust Pipeline**: Incorporates a strong type system, automated CI/CD, and comprehensive testing for reproducibility.
 
 ## Methods & Results
 
 - **Validation:**
-  - Tested on diverse datasets (synthetic and real data)
+  - GPCell has been rigorously tested on both synthetic and real gene expression datasets.
+  - Unit tests (see correctness.py and gpflow_tests.py) ensure that background noise, detrending, and GP parameter estimation are accurate.
 - **Performance:**
-  - Speed improvements using multiprocessing
-  - Accuracy in oscillation detection
+  - Leverages parallel processing via Joblib (see fit_processes in utils.py) to dramatically reduce computation time
+  - Demonstrated improvements in model fitting speed and oscillation detection accuracy.
 - **Visuals:**
-  - Include charts/diagrams to illustrate model fitting and results
+  - Results include performance charts and model prediction plots (e.g., mean and variance estimates from the GaussianProcess class).
 
 ## Discussion & Impact
 
 - **Strengths:**
-  - Extensibility and user-friendly design
-  - Enhanced reproducibility for bioinformatics research
+  - Modularity: Each component (noise estimation, detrending, GP fitting) is self-contained, making the system easy to maintain and extend.
+  - Flexibility: Supports multiple inference techniques (BIC, bootstrap, MCMC) and custom kernel composition.
 - **Challenges:**
-  - Managing performance bottlenecks
-  - Addressing edge cases in complex datasets
+  - Parameter Tuning: Fine-tuning priors and hyperparameters remains challenging in heterogeneous datasets.
+  - Scalability: Handling extremely large datasets may require additional optimizations.
 - **Broader Impact:**
-  - Provides a robust platform for advanced GP modeling in bioinformatics
+  - By transitioning from MATLAB to Python, GPCell enhances reproducibility and accessibility for bioinformatics researchers.
+  - Its extensible design paves the way for future research and application in diverse scientific domains.
 
 ## Q & A
 
