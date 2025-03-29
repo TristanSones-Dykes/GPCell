@@ -25,7 +25,7 @@ import tensorflow_probability as tfp
 import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
-from numpy import float64, nonzero, std, mean, max
+from numpy import float64, ndarray, nonzero, std, mean, max
 from gpflow import Parameter
 from gpflow.kernels import RBF
 from gpflow.utilities import to_default_float
@@ -385,7 +385,7 @@ def benchmark_memmap_performance(
     operator: GPOperator,
     verbose: bool,
     n_jobs: int = -1,
-):
+) -> ndarray:
     """
     Benchmarks the performance improvement of using padding and memmap based on given simulation parameters.
     Works with varying-length traces within each group.
@@ -421,8 +421,8 @@ def benchmark_memmap_performance(
 
     Returns
     -------
-    None
-        Plots the heatmap of speed gains.
+    output : ndarray
+        (max_lengths x num_traces) matrix of speed gains.
     """
     # Get unique max lengths and trace counts from data structure
     max_lengths_set = set()
@@ -492,8 +492,13 @@ def benchmark_memmap_performance(
             f"Max length: {max_length}, Number of traces: {N}, Naive Time: {time_no_memmap}"
         )
 
+        # Calculate speed gain and store in results matrix
+        row_idx = max_length_values.index(max_length)
+        col_idx = num_trace_values.index(N)
+        speed_gains[row_idx, col_idx] = time_no_memmap
+
         # Destroy workers
-        get_reusable_executor().shutdown(wait=True)
+        # get_reusable_executor().shutdown(wait=True)
 
     # --- With padding/memmap --- #
     print(f"\nMemmap model fitting: {len(X_list)} groups")
@@ -540,10 +545,10 @@ def benchmark_memmap_performance(
         # Calculate speed gain and store in results matrix
         row_idx = max_length_values.index(max_length)
         col_idx = num_trace_values.index(N)
-        speed_gains[row_idx, col_idx] = time_no_memmap / time_with_memmap
+        speed_gains[row_idx, col_idx] /= time_with_memmap
 
         # Destroy workers
-        get_reusable_executor().shutdown(wait=True)
+        # get_reusable_executor().shutdown(wait=True)
 
     # Plotting heatmap
     plt.figure(figsize=(10, 7))
@@ -570,6 +575,8 @@ def benchmark_memmap_performance(
 
     plt.tight_layout()
     plt.show()
+
+    return speed_gains
 
 
 def detrend(

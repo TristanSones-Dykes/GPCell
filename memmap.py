@@ -20,8 +20,8 @@ from gpcell.backend.priors import hes_ouosc_prior, ouosc_trainables
 
 
 # Benchmark Parameters
-max_lengths = [int(x) for x in np.linspace(10, 30, 3, dtype=int)]
-num_traces = [5, 10, 20, 50]  # , 100, 200]
+max_lengths = [int(x) for x in np.linspace(10, 75, 3, dtype=int)]
+num_traces = [int(x) for x in np.linspace(5, 100, 2, dtype=int)]
 N, K = max(num_traces), 10
 noise = np.float64(0.1)
 
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     # plot_data(X_list, Y_list)
 
     # Benchmark Memory-Mapped Performance
-    benchmark_memmap_performance(
+    speed_matrix = benchmark_memmap_performance(
         X_list,
         Y_list,
         max_lengths,
@@ -169,3 +169,7 @@ if __name__ == "__main__":
         op,
         verbose,
     )
+
+    # Save Results
+    np.save("speed_matrix.npy", speed_matrix)
+    print(speed_matrix)
