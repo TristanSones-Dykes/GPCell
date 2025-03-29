@@ -1,10 +1,10 @@
 # Standard Library Imports
-from re import A
 from typing import (
     List,
     Tuple,
 )
 import unittest
+import os
 
 # Third-Party Library Imports
 import numpy as np
@@ -30,6 +30,8 @@ class TestCorrectness(unittest.TestCase):
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.path = "data/hes/Hes1_example.csv"
+
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
         # read in data
         cls.X, cls.Y = utils.load_data(cls.path, "Time (h)", "Cell")

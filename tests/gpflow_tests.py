@@ -1,5 +1,6 @@
 # import testing utilities
 import unittest
+import os
 
 # import third-party helpers
 import numpy as np
@@ -155,4 +156,5 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
 
 
 if __name__ == "__main__":
+    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     unittest.main()
