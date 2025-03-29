@@ -2,7 +2,7 @@ library(tidyverse)
 
 
 # Define parameters
-n_cells <- 200 # total replicates used in the simulation
+n_cells <- 1000 # total replicates used in the simulation
 t_final_vals <- c(1500, 600) # 25/10 hours
 noise_vals <- c(0.1, 0.5)
 
