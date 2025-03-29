@@ -723,9 +723,9 @@ class OscillatorDetector:
                         ou_nan, ouosc_nan = isnan(ou_LL), isnan(ouosc_LL)
                         ou_all, ouosc_all = ou_nan.all(), ouosc_nan.all()
 
-                    if attempts == 5:
-                        raise ValueError(
-                            f"Cell {i + 1} could not be fitted, NaN likelihoods"
+                    if attempts % 5 == 0:
+                        print(
+                            f"Cell {i + 1} has NaNs in the model fitting after {attempts} attempts"
                         )
 
             ou_LL = array(ou_LL)[~ou_nan]

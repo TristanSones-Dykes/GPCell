@@ -2,7 +2,7 @@ library(tidyverse)
 
 
 # Define parameters
-n_cells <- 500 # total replicates used in the simulation
+n_cells <- 200 # total replicates used in the simulation
 t_final_vals <- c(1500, 600) # 25/10 hours
 noise_vals <- c(0.1, 0.5)
 
@@ -20,7 +20,7 @@ paths <- sapply(sim_params, function(param) {
   noise <- param[1]
   t_final <- param[2]
   n_cells <- param[3]
-  sprintf("%sdataNORMED%s_%.1f.csv", path, t_final, noise)
+  sprintf("%sdataNORMED%s_%.1f_%s.csv", path, t_final, noise, n_cells)
 })
 
 # Time columns

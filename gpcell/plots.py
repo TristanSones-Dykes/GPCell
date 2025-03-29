@@ -145,7 +145,6 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
-    ax3.margins(x=0, y=0)
 
     # Subplot D: Experiment 2, first timeseries.
     ax4 = plt.subplot(3, 3, 4)
@@ -207,7 +206,6 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
-    ax6.margins(x=0, y=0)
 
     # Subplot G: Experiment 3, first timeseries.
     ax7 = plt.subplot(3, 3, 7)
@@ -269,7 +267,6 @@ def plot_rocs_and_timeseries(
         va="bottom",
         color="k",
     )
-    ax9.margins(x=0, y=0)
 
     plt.tight_layout()
     plt.show()
@@ -346,29 +343,32 @@ def compute_rocs_from_file(
 
     # --- ROC analysis using Lomb–Scargle beat detection ---#
 
-    # Define thrvec as the exponential of 200 points linearly spaced between -15 and -0.01
-    thrvec = np.exp(np.linspace(-15, -0.01, 200))
+    thrvec = np.exp(np.linspace(-15, 0, 200))
+    n_thr = len(thrvec)
+    n_series = len(y_list)
 
-    # Preallocate arrays for FP2 and TP2. Their length is the same as thrvec.
-    FP2 = np.zeros(len(thrvec))
-    TP2 = np.zeros(len(thrvec))
+    # Preallocate a matrix to store detection results:
+    # rows: time series; columns: thresholds
+    beatmat = np.empty((n_series, n_thr), dtype=int)
 
-    # Preallocate beatvec for the number of columns in y_list
-    beatvec = np.zeros(total_columns)
+    # Loop once over all time series to compute their periodograms
+    for i, y in enumerate(y_list):
+        ls = LombScargle(x, y)
+        frequency, power = ls.autopower(normalization="standard")
+        # For each threshold, compute false alarm level and determine detection
+        for j, thr in enumerate(thrvec):
+            pth = ls.false_alarm_level(thr)
+            beatmat[i, j] = int(np.any(power > pth))
 
-    # Loop over threshold values
-    for i, thr in enumerate(thrvec):
-        # For each signal in dataTOT:
-        for j, y in enumerate(y_list):
-            ls = LombScargle(x, y, normalization="standard")
-            freq, power = ls.autopower(minimum_frequency=0.1, maximum_frequency=10)
-            p_vals = ls.false_alarm_probability(power)
-            beatvec[j] = int(np.any(p_vals < thr))
-
-        # Split detections into two groups, analogous to MATLAB’s A and B.
-        A = beatvec[:n_cells]
-        B = beatvec[n_cells : 2 * n_cells]
-        FP2[i] = np.sum(A)
-        TP2[i] = np.sum(B)
+    # Compute False Positives (FP) and True Positives (TP) vectorized over thresholds.
+    # Note: following the original code's convention:
+    #   - First half of y_list are considered oscillatory signals.
+    #   - Second half are non-oscillatory.
+    FP2 = (
+        np.sum(beatmat[:n_cells, :], axis=0) / n_cells
+    )  # fraction detected among first half
+    TP2 = (
+        np.sum(beatmat[n_cells:, :], axis=0) / n_cells
+    )  # fraction detected among second half
 
     return FP1, TP1, FP2, TP2
