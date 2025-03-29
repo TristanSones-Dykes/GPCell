@@ -1,0 +1,73 @@
+---
+title: "GPCell: A Performant Framework for Gaussian Processes in Bioinformatics"
+author: "Tristan Sones-Dykes"
+date: "April 2025"
+institute: "School of Mathematics and Statistics, The University of St Andrews"
+format:
+  beamer
+slide-level: 2
+bibliography: references.bib
+---
+
+## Agenda
+
+- Motivation & Background
+- Problem Statement
+- The Solution: GPCell
+- Results
+- Discussion
+- Q&A
+
+## Motivation & Background
+
+- **Historical Foundations**
+  - @jacob_genetic_1961: 
+  - @hardin_feedback_1990
+  - @phillips_identifying_2017
+- **Introduction to Gaussian Processes**
+  - Non-parametric, probabilistic, and flexible modeling approach
+
+## Problem Statement
+
+- **Limitations in Prior Work:**
+  - MATLAB-based approach in @phillips_identifying_2017
+  - Domain-specific application and limited extensibility
+- **The Need for GPCell:**
+  - A general, extensible Python framework for GP fitting and oscillation detection
+
+## GPCell
+
+- **Overview:**
+  - A Python library built on TensorFlow Probability
+- **Key Features:**
+  - **OscillatorDetector:** Class for analyzing gene expression oscillations
+  - Extensible framework (e.g., integration of MCMC methods)
+  - Strong type system and automated CI/CD pipeline
+  - Multiprocessing pipeline for improved performance
+- *(Consider adding code snippets or diagrams here)*
+
+## Methods & Results
+
+- **Validation:**
+  - Tested on diverse datasets (synthetic and real data)
+- **Performance:**
+  - Speed improvements using multiprocessing
+  - Accuracy in oscillation detection
+- **Visuals:**
+  - Include charts/diagrams to illustrate model fitting and results
+
+## Discussion & Impact
+
+- **Strengths:**
+  - Extensibility and user-friendly design
+  - Enhanced reproducibility for bioinformatics research
+- **Challenges:**
+  - Managing performance bottlenecks
+  - Addressing edge cases in complex datasets
+- **Broader Impact:**
+  - Provides a robust platform for advanced GP modeling in bioinformatics
+
+## Q & A
+
+**Thank you!**  
+Questions?
