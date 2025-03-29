@@ -130,7 +130,7 @@ def plot_rocs_and_timeseries(
     # Subplot C: Experiment 1 ROC curves.
     ax3 = plt.subplot(3, 3, 3)
     ax3.plot(FP11 / n_cells, TP11 / n_cells, color="r", label="GP")
-    ax3.plot(FP21 / n_cells, TP21 / n_cells, color="b", label="L-S")
+    ax3.plot(FP21, TP21, color="b", label="L-S")
     ax3.set_xlabel("1 - Specificity (false positive rate)")
     ax3.set_ylabel("Sensitivity (true positive rate)")
     ax3.legend(loc="lower right")
@@ -191,7 +191,7 @@ def plot_rocs_and_timeseries(
     # Subplot F: Experiment 2 ROC curves.
     ax6 = plt.subplot(3, 3, 6)
     ax6.plot(FP12 / n_cells, TP12 / n_cells, color="r", label="GP")
-    ax6.plot(FP22 / n_cells, TP22 / n_cells, color="b", label="L-S")
+    ax6.plot(FP22, TP22, color="b", label="L-S")
     ax6.set_xlabel("1 - Specificity (false positive rate)")
     ax6.set_ylabel("Sensitivity (true positive rate)")
     ax6.legend(loc="lower right")
@@ -252,7 +252,7 @@ def plot_rocs_and_timeseries(
     # Subplot I: Experiment 3 ROC curves.
     ax9 = plt.subplot(3, 3, 9)
     ax9.plot(FP13 / n_cells, TP13 / n_cells, color="r", label="GP")
-    ax9.plot(FP23 / n_cells, TP23 / n_cells, color="b", label="L-S")
+    ax9.plot(FP23, TP23, color="b", label="L-S")
     ax9.set_xlabel("1 - Specificity (false positive rate)")
     ax9.set_ylabel("Sensitivity (true positive rate)")
     ax9.legend(loc="lower right")
