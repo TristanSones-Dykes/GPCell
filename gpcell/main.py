@@ -19,7 +19,6 @@ from numpy import (
     array,
     linspace,
     zeros,
-    ones,
     max,
     argsort,
     zeros_like,

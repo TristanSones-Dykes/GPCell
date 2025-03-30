@@ -20,6 +20,8 @@ class TestOscillatorDetectorMethods(unittest.TestCase):
         self.background_name = "Background"
         self.Y_name = "Cell"
 
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
         # Create OscillatorDetector instance
         self.detector = gc.OscillatorDetector.from_file(
             path=self.sample_data_path,
@@ -69,7 +71,9 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         X_name = "Time (h)"
         background_name = "Background"
         Y_name = "Cell"
-        params = {"verbose": True}
+        params = {"verbose": False}
+
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
         # Create OscillatorDetector instance with Hes dataset
         cls.detector = gc.OscillatorDetector.from_file(
@@ -117,7 +121,9 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
         X_name = "Time (h)"
         background_name = "Background"
         Y_name = "Cell"
-        params = {"verbose": True, "joblib": True}
+        params = {"verbose": False, "joblib": True}
+
+        os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
         # Create OscillatorDetector instance with Hes dataset
         cls.detector = gc.OscillatorDetector.from_file(
@@ -156,5 +162,4 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
     unittest.main()
