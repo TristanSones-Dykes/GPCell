@@ -115,39 +115,57 @@ class GaussianProcess:
                 ) = self._run_mcmc(gp_reg)
 
     def _run_mcmc(
-        self, model: GPMC, num_samples: int = 1000, num_burnin_steps: int = 500
+        self,
+        model: GPMC,
+        num_samples: int = 1000,
+        num_burnin_steps: int = 500,
+        sampler: str = "hmc",
     ):
         # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
-        hmc_helper = SamplingHelper(
+        sampler_helper = SamplingHelper(
             model.log_posterior_density, model.trainable_parameters
         )
 
         # define model
-        hmc = mcmc.HamiltonianMonteCarlo(
-            target_log_prob_fn=hmc_helper.target_log_prob_fn,
-            num_leapfrog_steps=10,
-            step_size=0.01,
-        )
-        adaptive_hmc = mcmc.SimpleStepSizeAdaptation(
-            hmc,
-            num_adaptation_steps=10,
-            target_accept_prob=f64(0.75),
-            adaptation_rate=0.1,
-        )
+        match sampler:
+            case "hmc":
+                sampler = mcmc.HamiltonianMonteCarlo(
+                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
+                    num_leapfrog_steps=10,
+                    step_size=0.01,
+                )
+                adaptive_sampler = mcmc.SimpleStepSizeAdaptation(
+                    sampler,
+                    num_adaptation_steps=10,
+                    target_accept_prob=f64(0.75),
+                    adaptation_rate=0.1,
+                )
+            case "nuts":
+                sampler = mcmc.NoUTurnSampler(
+                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
+                    step_size=f64(0.01),
+                )
+                adaptive_sampler = mcmc.DualAveragingStepSizeAdaptation(
+                    sampler,
+                    num_adaptation_steps=int(0.8 * num_burnin_steps),
+                    target_accept_prob=f64(0.75),
+                )
+            case _:
+                raise ValueError(f"Unknown sampler: {sampler}. Use 'hmc' or 'nuts'.")
 
         @function(reduce_retracing=True)
         def run_chain_fn():
             return mcmc.sample_chain(
                 num_results=num_samples,
                 num_burnin_steps=num_burnin_steps,
-                current_state=hmc_helper.current_state,
-                kernel=adaptive_hmc,
+                current_state=sampler_helper.current_state,
+                kernel=adaptive_sampler,
                 trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
             )
 
         # run chain and extract samples
         samples, _ = run_chain_fn()  # type: ignore
-        parameter_samples = hmc_helper.convert_to_constrained_values(samples)
+        parameter_samples = sampler_helper.convert_to_constrained_values(samples)
 
         # map parameter names to indices
         param_to_name = {param: name for name, param in parameter_dict(model).items()}

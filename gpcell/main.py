@@ -571,8 +571,8 @@ class OscillatorDetector:
         )
 
         # plot
-        if "MCMC" in self.plots:
-            self.generate_plot("MCMC")
+        # if "MCMC" in self.plots:
+        #     self.generate_plot("MCMC")
 
     def _fit_ou_ouosc(
         self,
@@ -630,6 +630,8 @@ class OscillatorDetector:
                     trainable=ouosc_trainables,
                     mcmc=mcmc,
                 )
+            case _:
+                raise ValueError("joblib must be a boolean")
 
         return ou_GPs, ouosc_GPs
 
@@ -797,6 +799,7 @@ class OscillatorDetector:
             "BIC": "bic_plot",
             "LLR": "llr_plot",
             "periods": "periods_plot",
+            "MCMC": "mcmc_plot",
         }
 
         if target not in plot_attributes:

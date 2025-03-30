@@ -68,8 +68,8 @@ ouosc_trainables = {
 
 def mcmc_ou_priors(noise: Numeric) -> GPPrior:
     return {
-        "kernel.lengthscales": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
-        "kernel.variance": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
+        "kernel.lengthscales.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
+        "kernel.variance.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
         "likelihood.variance": noise**2,
     }
 
