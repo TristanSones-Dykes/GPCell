@@ -19,6 +19,7 @@ from numpy import (
     array,
     linspace,
     zeros,
+    ones,
     max,
     argsort,
     zeros_like,
@@ -681,52 +682,64 @@ class OscillatorDetector:
 
                     attempts = 0
                     # refit model until no NaNs
-                    while (ou_all or ouosc_all) and attempts < 5:
+                    while ou_all or ouosc_all:
                         attempts += 1
                         # fit 10 replicates of each model
-                        ou = next(
-                            iter(
-                                f(
-                                    [x],
-                                    [y],
-                                    Matern12,
-                                    [
-                                        lambda noise=self.noise_list[i]: self.ou_prior(
-                                            noise
-                                        )
-                                    ],
-                                    replicates=10,
-                                    trainable=self.ou_trainables,
+                        if ou_all:
+                            ou = next(
+                                iter(
+                                    f(
+                                        [x],
+                                        [y],
+                                        Matern12,
+                                        [
+                                            lambda noise=self.noise_list[
+                                                i
+                                            ]: self.ou_prior(noise)
+                                        ],
+                                        replicates=10,
+                                        trainable=self.ou_trainables,
+                                    )
                                 )
                             )
-                        )
-                        ouosc = next(
-                            iter(
-                                f(
-                                    [x],
-                                    [y],
-                                    [Matern12, Cosine],
-                                    [
-                                        lambda noise=self.noise_list[
-                                            i
-                                        ]: self.ouosc_prior(noise)
-                                    ],
-                                    replicates=10,
-                                    trainable=self.ouosc_trainables,
+
+                        if ouosc_all:
+                            ouosc = next(
+                                iter(
+                                    f(
+                                        [x],
+                                        [y],
+                                        [Matern12, Cosine],
+                                        [
+                                            lambda noise=self.noise_list[
+                                                i
+                                            ]: self.ouosc_prior(noise)
+                                        ],
+                                        replicates=10,
+                                        trainable=self.ouosc_trainables,
+                                    )
                                 )
                             )
-                        )
 
                         # extract and test for NaNs
-                        ou_LL = [gp.log_posterior() for gp in ou]
-                        ouosc_LL = [gp.log_posterior() for gp in ouosc]
-                        ou_nan, ouosc_nan = isnan(ou_LL), isnan(ouosc_LL)
+                        if ou_all:
+                            ou_LL = [gp.log_posterior() for gp in ou]
+                            ou_nan = isnan(ou_LL)
+                        if ouosc_all:
+                            ouosc_LL = [gp.log_posterior() for gp in ouosc]
+                            ouosc_nan = isnan(ouosc_LL)
                         ou_all, ouosc_all = ou_nan.all(), ouosc_nan.all()
 
-                    if attempts % 5 == 0:
-                        print(
-                            f"Cell {i + 1} has NaNs in the model fitting after {attempts} attempts"
-                        )
+                        # if reached 5 attempts, print and break
+                        if (ou_all or ouosc_all) and attempts >= 5:
+                            print(
+                                f"Cell {i + 1} has NaNs in the model fitting after {attempts} attempts"
+                            )
+                            ou_LL = zeros(10)
+                            ou_nan = isnan(ou_LL)
+                            ouosc_LL = zeros(10)
+                            ouosc_nan = isnan(ouosc_LL)
+                            break
 
             ou_LL = array(ou_LL)[~ou_nan]
             ouosc_LL = array(ouosc_LL)[~ouosc_nan]
