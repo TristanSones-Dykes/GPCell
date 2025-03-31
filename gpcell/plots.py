@@ -1,7 +1,5 @@
 # Standard Library Imports
-from typing import (
-    Tuple,
-)
+from typing import List, Optional, Sequence, Tuple
 
 # Third-Party Library Imports
 import numpy as np
@@ -9,6 +7,8 @@ import matplotlib.pyplot as plt
 
 # Direct Namespace Imports
 from astropy.timeseries import LombScargle
+from matplotlib import axes
+from sklearn.metrics import roc_curve, auc
 
 # Internal Project Imports
 from gpcell import OscillatorDetector
@@ -36,6 +36,7 @@ def plot_rocs_and_timeseries(
     FP23: np.ndarray,
     TP23: np.ndarray,
     n_cells: int,
+    colour_order: List[str] = ["r", "b"],
 ) -> None:
     """
     Generates a 3x3 grid of subplots replicating the MATLAB figure.
@@ -127,23 +128,13 @@ def plot_rocs_and_timeseries(
         color="k",
     )
 
-    # Subplot C: Experiment 1 ROC curves.
-    ax3 = plt.subplot(3, 3, 3)
-    ax3.plot(FP11 / n_cells, TP11 / n_cells, color="r", label="GP")
-    ax3.plot(FP21, TP21, color="b", label="L-S")
-    ax3.set_xlabel("1 - Specificity (false positive rate)")
-    ax3.set_ylabel("Sensitivity (true positive rate)")
-    ax3.legend(loc="lower right")
-    xlims = ax3.get_xlim()
-    ylims = ax3.get_ylim()
-    ax3.text(
-        xlims[0] - 0.1 * (xlims[1] - xlims[0]),
-        ylims[1] + 0.03 * (ylims[1] - ylims[0]),
-        "C",
-        fontsize=9,
-        ha="right",
-        va="bottom",
-        color="k",
+    # Plot ROC curves for experiment 1
+    plot_roc(
+        [FP11, FP21],
+        [TP11, TP21],
+        labels=["GP", "L-S"],
+        axes=plt.subplot(3, 3, 3),
+        colour_order=colour_order,
     )
 
     # Subplot D: Experiment 2, first timeseries.
@@ -188,23 +179,13 @@ def plot_rocs_and_timeseries(
         color="k",
     )
 
-    # Subplot F: Experiment 2 ROC curves.
-    ax6 = plt.subplot(3, 3, 6)
-    ax6.plot(FP12 / n_cells, TP12 / n_cells, color="r", label="GP")
-    ax6.plot(FP22, TP22, color="b", label="L-S")
-    ax6.set_xlabel("1 - Specificity (false positive rate)")
-    ax6.set_ylabel("Sensitivity (true positive rate)")
-    ax6.legend(loc="lower right")
-    xlims = ax6.get_xlim()
-    ylims = ax6.get_ylim()
-    ax6.text(
-        xlims[0] - 0.1 * (xlims[1] - xlims[0]),
-        ylims[1] + 0.03 * (ylims[1] - ylims[0]),
-        "F",
-        fontsize=9,
-        ha="right",
-        va="bottom",
-        color="k",
+    # Plot ROC curves for experiment 2
+    plot_roc(
+        [FP12, FP22],
+        [TP12, TP22],
+        labels=["GP", "L-S"],
+        axes=plt.subplot(3, 3, 6),
+        colour_order=colour_order,
     )
 
     # Subplot G: Experiment 3, first timeseries.
@@ -249,27 +230,89 @@ def plot_rocs_and_timeseries(
         color="k",
     )
 
-    # Subplot I: Experiment 3 ROC curves.
-    ax9 = plt.subplot(3, 3, 9)
-    ax9.plot(FP13 / n_cells, TP13 / n_cells, color="r", label="GP")
-    ax9.plot(FP23, TP23, color="b", label="L-S")
-    ax9.set_xlabel("1 - Specificity (false positive rate)")
-    ax9.set_ylabel("Sensitivity (true positive rate)")
-    ax9.legend(loc="lower right")
-    xlims = ax9.get_xlim()
-    ylims = ax9.get_ylim()
-    ax9.text(
+    # Plot ROC curves for experiment 3
+    plot_roc(
+        [FP13, FP23],
+        [TP13, TP23],
+        labels=["GP", "L-S"],
+        axes=plt.subplot(3, 3, 9),
+        colour_order=colour_order,
+    )
+
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_roc(
+    FP: Sequence[np.ndarray] | np.ndarray,
+    TP: Sequence[np.ndarray] | np.ndarray,
+    labels: Optional[Sequence[str]] = None,
+    axes: Optional[axes.Axes] = None,
+    colour_order: List[str] = ["r", "b"],
+):
+    """
+    Plots ROC curves for multiple models.
+
+    Parameters
+    ----------
+    FP : Sequence[np.ndarray] | np.ndarray
+        False positive rates for each model.
+    TP : Sequence[np.ndarray] | np.ndarray
+        True positive rates for each model.
+    labels : Optional[Sequence[str]], optional
+        List of labels for each model, by default None.
+    axes : Optional[axes.Axes], optional
+        Matplotlib axes to plot on, by default None.
+    colour_order : List[str], optional
+        List of colors for each model, by default ["r", "b"].
+    """
+    # axes IO
+    if axes is None:
+        fig, ax = plt.subplots(1, 1, figsize=(8, 6))
+    else:
+        ax = axes
+
+    # Check if FP and TP are lists or arrays
+    if isinstance(FP, np.ndarray):
+        FP = [FP]
+    if isinstance(TP, np.ndarray):
+        TP = [TP]
+    if len(FP) != len(TP):
+        raise ValueError(f"FP and TP must have the same length: {FP} vs {TP}")
+
+    # Plot ROC curves
+    for i, (FP, TP) in enumerate(zip(FP, TP)):
+        # calculate AUC
+        auc_value = auc(FP, TP)
+
+        # set legend label
+        if labels is not None:
+            label = labels[i] + f" (AUC = {auc_value:.2f})"
+        else:
+            label = f"Model {i + 1} (AUC = {auc_value:.2f})"
+
+        # set colours
+        if i < len(colour_order):
+            colour = colour_order[i]
+        else:
+            colour = None
+
+        ax.plot(FP, TP, label=label, color=colour)
+
+    ax.set_xlabel("1 - Specificity (false positive rate)")
+    ax.set_ylabel("Sensitivity (true positive rate)")
+    ax.legend(loc="lower right")
+    xlims = ax.get_xlim()
+    ylims = ax.get_ylim()
+    ax.text(
         xlims[0] - 0.1 * (xlims[1] - xlims[0]),
         ylims[1] + 0.03 * (ylims[1] - ylims[0]),
-        "I",
+        "C",
         fontsize=9,
         ha="right",
         va="bottom",
         color="k",
     )
-
-    plt.tight_layout()
-    plt.show()
 
 
 def compute_rocs_from_file(
@@ -341,34 +384,59 @@ def compute_rocs_from_file(
         FP1[i] = np.sum(A > th)
         TP1[i] = np.sum(B > th)
 
+    # Normalize FP and TP for the first method
+    FP1 /= n_cells
+    TP1 /= n_cells
+
     # --- ROC analysis using Lomb–Scargle beat detection ---#
-
-    thrvec = np.exp(np.linspace(-15, 0, 200))
-    n_thr = len(thrvec)
-    n_series = len(y_list)
-
-    # Preallocate a matrix to store detection results:
-    # rows: time series; columns: thresholds
-    beatmat = np.empty((n_series, n_thr), dtype=int)
-
-    # Loop once over all time series to compute their periodograms
-    for i, y in enumerate(y_list):
-        ls = LombScargle(x, y)
-        frequency, power = ls.autopower(normalization="standard")
-        # For each threshold, compute false alarm level and determine detection
-        for j, thr in enumerate(thrvec):
-            pth = ls.false_alarm_level(thr)
-            beatmat[i, j] = int(np.any(power > pth))
-
-    # Compute False Positives (FP) and True Positives (TP) vectorized over thresholds.
-    # Note: following the original code's convention:
-    #   - First half of y_list are considered oscillatory signals.
-    #   - Second half are non-oscillatory.
-    FP2 = (
-        np.sum(beatmat[:n_cells, :], axis=0) / n_cells
-    )  # fraction detected among first half
-    TP2 = (
-        np.sum(beatmat[n_cells:, :], axis=0) / n_cells
-    )  # fraction detected among second half
+    # Compute ROC curves using Lomb-Scargle method
+    FP2, TP2 = compute_LS_roc(x, y_list, n_cells)
 
     return FP1, TP1, FP2, TP2
+
+
+def compute_LS_roc(
+    x: np.ndarray, y_list: Sequence[np.ndarray], n_cells
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Compute the Lomb-Scargle ROC curve.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Time values.
+    y_list : list of np.ndarray
+        List of time series data for each cell.
+    n_cells : int
+        Number of cells.
+
+    Returns
+    -------
+    FP : list
+        List of false positive rates.
+    TP : list
+        List of true positive rates.
+    """
+    # Initialize lists to store false positives and true positives
+    FP = []
+    TP = []
+
+    true_labels = np.array([0] * n_cells + [1] * n_cells)
+    max_scores = np.zeros((2 * n_cells,))
+
+    # Loop through each cell's data
+    for i in range(2 * n_cells):
+        # Extract the time series data for the current cell
+        y = y_list[i]
+
+        # Calculate the Lomb-Scargle periodogram
+        frequency, power = LombScargle(x, y).autopower()
+        max_score = np.max(power)
+
+        # Add the maximum score to the list
+        max_scores[i] = max_score
+
+    # Calculate the ROC curve
+    FP, TP, _ = roc_curve(true_labels, max_scores)
+
+    return FP, TP
