@@ -21,11 +21,15 @@ bibliography: references.bib
 ## Motivation & Background
 
 - **Historical Foundations**
-  - @jacob_genetic_1961: 
+  - @jacob_genetic_1961: Demonstrated gene expression as a result of external stimuli through mRNA modulation
   - @hardin_feedback_1990: Demonstrated feedback mechanisms in gene expression, revealing oscillatory behavior in circadian rhythms.
   - @phillips_identifying_2017: Applied Gaussian processes to classify gene expression time series in neural progenitor cells, highlighting oscillatory versus aperiodic dynamics.
 - **Introduction to Gaussian Processes**
   - A non-parametric, probabilistic modeling approach that offers flexibility in fitting complex biological signals and quantifying uncertainty.
+
+---
+
+![Example of fit GPs](detrend.png)
 
 ## Problem Statement
 
@@ -57,6 +61,54 @@ bibliography: references.bib
 - **Visuals:**
   - Results include performance charts and model prediction plots (e.g., mean and variance estimates from the GaussianProcess class).
 
+---
+
+![ROC of Gaussian Process and Lomb-Scargle fits](ROC_plot.png){height=85%}
+
+## Figures
+### Performance Comparisons: Data simulation
+```{r}
+impl_names <- c(
+  "Python, parallel and njit",
+  "Python, parallel",
+  "Python",
+  "MATLAB"
+)
+
+times <- c(
+  "58.64",
+  "315.23",
+  "3722.16",
+  "Approx 1.5 hours"
+)
+
+knitr::kable(data.frame(Implementation = impl_names, `Time (s)` = times), caption = "Average data simulation times")
+```
+
+---
+
+### Performance Comparisons: BIC pipeline
+
+```{r}
+impl_names <- c(
+  "Python, parallel",
+  "Python",
+  "MATLAB"
+)
+
+times <- c(
+  12.54,
+  37.03,
+  44.41
+)
+
+knitr::kable(data.frame(Implementation = impl_names, `Time (s)` = times), caption = "Average BIC pipeline times")
+```
+
+### MCMC
+![Example MCMC fit using GPCell](mcmc.png){height=30%}
+
+
 ## Discussion & Impact
 
 - **Strengths:**
@@ -65,9 +117,10 @@ bibliography: references.bib
 - **Challenges:**
   - Parameter Tuning: Fine-tuning priors and hyperparameters remains challenging in heterogeneous datasets.
   - Scalability: Handling extremely large datasets may require additional optimizations.
+  - Previous Work: Inconsistent choices made (e.g priors) that need to be investigated.
 - **Broader Impact:**
   - By transitioning from MATLAB to Python, GPCell enhances reproducibility and accessibility for bioinformatics researchers.
-  - Its extensible design paves the way for future research and application in diverse scientific domains.
+
 
 ## Q & A
 

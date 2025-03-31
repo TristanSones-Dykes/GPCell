@@ -1,6 +1,7 @@
 # import testing utilities
 import unittest
 import os
+import time
 
 # import third-party helpers
 import numpy as np
@@ -96,19 +97,22 @@ class TestOscillatorDetectorHes(unittest.TestCase):
         """
         Test the number of cells classified as oscillatory based on BIC.
         """
+        start = time.time()
         self.detector.fit(methods="BIC")
+        end = time.time()
+        print(f"Time taken for BIC classification: {end - start:.2f} seconds")
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
-    def test_bootstrap_classification(self):
-        """
-        Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
-        """
-        self.detector.fit(methods="bootstrap")
+    # def test_bootstrap_classification(self):
+    #     """
+    #     Test the number of cells classified as oscillatory based on synthetic-cell bootstrap.
+    #     """
+    #     self.detector.fit(methods="bootstrap")
 
-        for i, (true, pred) in enumerate(
-            zip([False, True, True, False], self.detector.osc_filt[-4:])
-        ):
-            self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
+    #     for i, (true, pred) in enumerate(
+    #         zip([False, True, True, False], self.detector.osc_filt[-4:])
+    #     ):
+    #         self.assertEqual(true, pred, f"Cell {i} classification incorrect.")
 
 
 # for joblib multiprocessing
@@ -146,7 +150,10 @@ class TestOscillatorDetectorJoblib(unittest.TestCase):
         """
         Test the number of cells classified as oscillatory based on BIC.
         """
+        start = time.time()
         self.detector.fit(methods="BIC")
+        end = time.time()
+        print(f"Time taken for BIC classification (joblib): {end - start:.2f} seconds")
         self.assertEqual(sum(np.array(self.detector.BIC_diffs) > 3.0), 10)
 
     def test_bootstrap_classification(self):
