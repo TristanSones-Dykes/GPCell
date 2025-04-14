@@ -1,1 +1,20 @@
 # Discussion
+
+Concise overview of the library’s features and benefits (performance, reproducibility, modularity)
+
+## Comparison with Existing Methods
+Strengths and improvements over previous MATLAB-based methods (performance, extensibility, user accessibility)
+
+Benchmarking results explicitly compared
+
+## Challenges and Limitations
+Issues encountered (e.g., parameter tuning, hyperparameter priors, scalability to large datasets)
+
+Addressing previous inconsistent choices (priors selection and impact)
+
+## Future Directions
+Potential enhancements (Variational inference methods, GPU support, web-based interactive version)
+
+Broader implications for the bioinformatics community and reproducibility
+
+Final thoughts summarising key findings, relevance, and impact of your work

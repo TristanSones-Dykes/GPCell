@@ -1,2 +1,21 @@
 # Results
 
+## Reproducibility of Prior Results
+ROC figures comparing your library against previous MATLAB implementation (both GP and Lomb-Scargle methods)
+
+Explicit statistical comparison (AUC values)
+
+## Performance Analysis
+Figures and tables showing speed improvements (e.g., parallelisation with Joblib, simulation with numba)
+
+Discussion on computational resources needed (RAM, CPU/GPU)
+
+## MCMC Implementation
+Example MCMC fits (trace plots, parameter distributions)
+
+Discuss implications and accuracy improvements from MCMC inference
+
+## Practical Demonstration and Extensibility
+Showcase practical use-cases (example time-series, how results are interpreted)
+
+Short code snippets demonstrating extensibility (showing actual examples using your library)
