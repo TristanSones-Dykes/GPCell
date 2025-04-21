@@ -68,7 +68,7 @@ Utilizing the GPflow library, which is based on TensorFlow, GPCell provides a us
 
 GPCell is structured into clearly defined, modular components. A schematic class diagram of the main components – `OscillatorDetector`, `GaussianProcess`, `GPRConstructor`, and supporting utility modules – is below:
 
-![class diagram of GPCell](gpcell_UML.png)
+![Class diagram of GPCell](gpcell_UML.png)
 
 `GaussianProcess`**:** An interface for GPflow's Gaussian Process models. It encapsulates the logic for optimising the given model type, predicting on new data, and extracting hyperparameters and values from the kernel. It is instantiated with a `GPRConstructor`, which defines the inference type (i.e: MLE vs MCMC), kernel, priors, and trainable hyperparameters.
 
