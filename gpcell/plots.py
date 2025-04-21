@@ -13,7 +13,7 @@ from sklearn.metrics import roc_curve, auc
 # Internal Project Imports
 from gpcell import OscillatorDetector
 from gpcell.utils import load_sim
-from gpcell.backend.priors import sim_ou_prior, sim_ouosc_prior
+from gpcell.backend import sim_ou_prior, sim_ouosc_prior
 
 
 def plot_rocs_and_timeseries(

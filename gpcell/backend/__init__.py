@@ -17,6 +17,14 @@ from ._types import (
     GPPrior,
     Numeric,
 )
+from .priors import (
+    hes_ou_prior,
+    hes_ouosc_prior,
+    ou_trainables,
+    ouosc_trainables,
+    sim_ou_prior,
+    sim_ouosc_prior,
+)
 from .gpr_constructor import GPRConstructor
 from .gaussian_process import GaussianProcess
 from ._utils import _simulate_replicate_mod9, _simulate_replicate_mod9_nodelay
@@ -34,6 +42,12 @@ __all__ = [
     "GaussianProcess",
     "_simulate_replicate_mod9",
     "_simulate_replicate_mod9_nodelay",
+    "hes_ou_prior",
+    "hes_ouosc_prior",
+    "ou_trainables",
+    "ouosc_trainables",
+    "sim_ou_prior",
+    "sim_ouosc_prior",
 ]
 
 

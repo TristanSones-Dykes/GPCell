@@ -32,8 +32,11 @@ from gpflow.kernels import White, Matern12, Cosine, Kernel
 # from gpflow.utilities import print_summary
 
 # Internal Project Imports
-from gpcell.backend import GaussianProcess, GPPriorFactory, GPPriorTrainingFlag, Ndarray
-from gpcell.backend.priors import (
+from gpcell.backend import (
+    GaussianProcess,
+    GPPriorFactory,
+    GPPriorTrainingFlag,
+    Ndarray,
     hes_ou_prior,
     hes_ouosc_prior,
     ou_trainables,
@@ -59,6 +62,7 @@ class OscillatorDetector:
             "plots": [],
             "set_noise": None,
             "joblib": False,
+            "cache": False,
             "ou_prior_gen": hes_ou_prior,
             "ouosc_prior_gen": hes_ouosc_prior,
             "ou_trainables": ou_trainables,
