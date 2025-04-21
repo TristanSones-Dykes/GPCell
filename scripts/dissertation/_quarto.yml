@@ -24,10 +24,10 @@ bibliography: references.bib
 csl: imaa.csl
 
 # global formatting
-mainfont: "EB Garamond"
-monofont: FiraCode-Medium
+# mainfont: "EB Garamond"
+# monofont: FiraCode-Medium
 toc: true
-toc-depth: 3
+toc-depth: 2
 toc-title: "Table of contents"
 lof: true
 lot: true

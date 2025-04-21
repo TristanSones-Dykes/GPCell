@@ -20,14 +20,13 @@ Given a set of training (for us, time) inputs $\mathbf X = {\mathbf x_1, ..., \m
 
 The joint distribution of the observed values and function at $\mathbf x_*$ is given by:
 
-$$
 \begin{align}
 \begin{bmatrix}
 \mathbf y \\
 f_*
 \end{bmatrix}
 &\sim 
-\mathcal N\bigl(
+\mathcal N(
 \begin{bmatrix}
 0 \\ 0
 \end{bmatrix}
@@ -36,9 +35,8 @@ f_*
 \mathbf K(\mathbf X, \mathbf X) + \sigma_n^2 I & \mathbf K(\mathbf X, \mathbf x_*) \\
 \mathbf K(\mathbf x_*, \mathbf X) & \mathbf K(\mathbf x_*, \mathbf x_*)
 \end{bmatrix}
-\bigr)
+)
 \end{align}
-$$
 
 Where $\mathbf K(\mathbf X, \mathbf X)$ is the covariance matrix computed over the training inputs and $\mathbf K(\mathbf X, \mathbf x_*)$ is covariance vector between the training inputs and the new input.
 
@@ -46,30 +44,192 @@ The predictive distribution for $f_*$ is then Gaussian with known mean and varia
 
 ### Kernels
 
-The choice of kernel (or covariance function) $k(\mathbf x, \mathbf x^\prime)$ is crucial as it determines the behaviour of the model.
+The choice of kernel $k(\mathbf x, \mathbf x^\prime)$ is crucial as it determines the behaviour of the model.\
+In our case, we will be training models with periodic and aperiodic kernels, then assessing and using the quality of their fits to determine whether or not the underlying gene expression is oscillating or not.
 
-## GPCell Introduction
+By modelling gene expression time-series generally using the Chemical Master Equation, deriving the Linear Noise Approximation as in @elf_fast_2003, and assuming the deterministic steady-state has been reached, @phillips_identifying_2017 shows that the underlying biological system can be modelled using an Ornstein Uhlenbeck (OU) process.
 
-Utilizing the GPflow library, which is based on TensorFlow, it provides a user-friendly interface for researchers, with an OscillatorDetector class specifically designed for this use-case. It also has unit tests to verify correctness, a strong type system to aid development and upkeep, as well as a suite of abstracted utility functions that automate the model fitting process through a multiprocessing pipeline increasing fitting speed.
+Thus, to create a pair of periodic and aperiodic kernels, they can take the OU kernel as it is already aperiodic and augment the OU kernel with a cosine kernel to create a quasi-periodic oscillatory process.
 
-## Software Architecture
+\begin{align}
+\mathbf K_{OU}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau) \\
+\mathbf K_{OUosc}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau)\cos(\beta \tau)
+\end{align}
 
-Class diagram of your library structure (OscillatorDetector, GaussianProcess, GPRConstructor, utility modules)
+Such that, if the OUosc model has a significantly better fit on a trace despite added model complexity, then it can be reasonably concluded that the trace is oscillatory.
 
-Detailed explanation of key classes and methods (GaussianProcess, OscillatorDetector, utility functions like fit_processes)
+\newpage
 
-## Optimisations and Computational Strategies
+## GPCell
 
-Joblib for parallel processing​
+Utilizing the GPflow library, which is based on TensorFlow, GPCell provides a user-friendly interface for researchers, with an `OscillatorDetector` class specifically designed for @phillips_identifying_2017's and similar use-cases. It also has unit tests to verify correctness, a strong type system to aid development and upkeep, as well as a suite of abstracted utility functions that automate the model fitting process through a multiprocessing pipeline increasing fitting speed.
 
-NumPy and Numba for just-in-time compilation
+### Software Architecture
 
-MCMC methods implemented using TensorFlow Probability​gaussian_process​gpr
+GPCell is structured into clearly defined, modular components. A schematic class diagram of the main components – `OscillatorDetector`, `GaussianProcess`, `GPRConstructor`, and supporting utility modules – is provided in Figure X
 
-Detailed computational steps (include diagrams or pseudocode)
+`GaussianProcess`**:** A wrapper around GPflow's Gaussian Process models. It encapsulates the logic for optimising the given model type, predicting on new data, and extracting hyperparameters and values from the kernel. It is instantiated with a `GPRConstructor`, which defines the inference type (i.e: MLE vs MCMC), kernel, priors, and trainable hyperparameters.
 
-## Extensibility and Modularity
+This provides a simple interface for users, allows for memory optimisation by only using the posterior data of the fit model after training, and contains individual-process utilities like plotting the fit model and common fit model administration tasks.
 
-Explain library extensibility (custom kernels, different inference techniques, user-defined prior distributions)​priors
+`GPRConstructor`**:** This class dynamically instantiates GPflow GP models, which require data, kernels, priors, and trainable hyperparameter flags.
 
-Small illustrative code snippets demonstrating ease of extending or adapting methods
+It is separated from `GaussianProcess`, as creating a model and attaching the above is easier to do in one step than to construct a `GaussianProcess` with a model type and priors, and then feed in the data dynamically to fit. This is largely due to the structure of GPflow and having to interact with TensorFlow's compute graph.\
+These can then be given to multiple GPs being fit in parallel on different CPU processes, making parallelism simpler and allowing `GaussianProcess` objects to be reused on new data with dynamically generated priors.
+
+`OscillatorDetector`**:** Serving as the main user-facing class for oscillation classification, it orchestrates the GP modelling workflow. It takes raw input data, performs preprocessing steps (background noise fitting and detrending), fits oscillatory and non-oscillatory models, and classifies gene expression traces based on statistical criteria such as Bayesian Information Criterion (BIC) or Log-Likelihood Ratios (LLRs).
+
+As well as being a self-contained usable product of the library, it can also be seen as an example of how one can use the library to do analysis.\
+A similarly performant, equivalent analysis could be done in a notebook using just the functions in `utils.py` and the users choice of priors and kernels from GPflow. Alternatively, a variety of analyses and extensions could be made to fit and model Gaussian Processes for different use-cases.
+
+\newpage
+
+`Utils.py`**:** Containing optimised functions such as `fit_processes_joblib` and `get_time_series` (runs Gillespie simulations of the modelled reactions in parallel), the utilities module supports parallel processing via Joblib, facilitating the rapid fitting and generation of large datasets.
+
+### Optimisations and Computational Strategies
+
+The computational complexity associated with GP model fitting – typically $O(n^3)$ – necessitates optimised implementations to handle large bioinformatics datasets efficiently. GPCell employs several optimisation strategies:
+
+**Parallel Processing:** GPCell exploits the parallel processing capabilities provided by `Joblib`. Functions like `fit_processes_joblib` provide general and simple to use utilities that parallelise core functionality. This function significantly reduces compute time by parallelising the fitting of multiple Gaussian Process models across the available CPU cores, yielding substantial performance improvements.
+
+This feature shows some of the big advantages of using Python over MATLAB for this use-case. `Joblib` only has Python dependencies, making it easier to use than the MATLAB library which requires external compilation for the parallelism to work.\
+Additionally, `Joblib`'s backend `loky` can pickle or serialise more complex objects as well as those defined in notebooks, allowing for a more a more user-friendly interface and efficient encapsulation.
+
+As for performance advantages, `Joblib` supports cached functions across multiple processes, so those used to run Gillespie simulations can be compiled once and then distributed.\
+It also provides simple access to `Numpy`'s optimised memmaps, meaning the input time series matrix can be temporarily written to the disk with multiple processes accessing it in parallel, instead of having to give each process its own copy of the experimental/simulated data. As fitting Gaussian Processes requires multiple processes accessing small subsets of the same large file, it is a good fit for memmaps.\
+Using memmaps also improves the stability of the parallel processes which is vital for large statistical experiments.
+
+**Just-In-Time Compilation:** For the computationally intensive Gillespie simulations, GPCell utilises `Numba`, a Just-In-Time compiler for Python. This lets you convert Python code (exclusively written in base Python and `Numpy`) into optimised machine code at runtime.
+
+\newpage
+
+### Extensibility and Modularity
+
+GPCell’s design strongly emphasises extensibility, enabling researchers to customise various components to their specific requirements.\
+This is enabled by a strong type system integrated throughout the library and the large TensorFlow (Probability) backend.
+
+**Custom Kernels:** GPCell supports the creation and combination of user-defined kernels, facilitating nuanced modelling of biological systems. Users can readily implement new kernels or combine existing ones using arithmetic operations, enhancing model flexibility.
+
+```{python}
+# | eval: false
+
+# Kernel types
+GPKernel = Union[Type[Kernel], Sequence[Type[Kernel]]]
+"""
+Type for Gaussian Process kernels.
+Can be a single kernel or a list for a composite kernel.
+If a list is provided, an operator can be provided or `*` is used.
+"""
+GPOperator = Callable[[Kernel, Kernel], Kernel]
+"""
+Type for operators that combine multiple kernels.
+
+Examples for a product `*` operator:
+    - `operator.mul` (what is used as default)
+    - `gpflow.kernels.Product`
+    - `lambda a, b: a * b`
+"""
+```
+
+Here, `Kernel` is the base class for GPflow's kernels, and is just an extension of TensorFlow's `Module` class which is used to build models in TensorFlow generally.
+
+The code shows that kernels (for use in `GPRConstructor`) can either be a single kernel or a list of kernels, and that the operator that combines them – if multiple are given – is just a callable that takes two kernels and outputs one regardless of operation.\
+In this format, $K_{OUosc}$ is defined as:
+
+```{python}
+# | eval: false
+
+# Kernels and operator for a GP model
+ouosc_kernel = [Matern12, Cosine]
+ouosc_op = operator.mul  # which is the default and typically omitted
+```
+
+\newpage
+
+To create a new kernel, all you have to do is inherit from `Kernel` – or one of its subclasses like `IsotropicStationary`; you could also take any class/TensorFlow `Module` and make it compatible with the `Kernel` interface.\
+This is the definition of `Matern12` in GPflow as an example.
+
+```{python}
+# | eval: false
+
+# Kernel example
+class Matern12(IsotropicStationary):
+    """
+    The kernel equation is
+    k(r) = sigma² * exp{-r}
+    """
+
+    @check_shapes(
+        "r: [batch..., N]",
+        "return: [batch..., N]",
+    )
+    def K_r(self, r: TensorType) -> tf.Tensor:
+        return self.variance * tf.exp(-r)
+```
+
+This uses GPflow's `IsotropicStationary` kernel base class, this is for stationary kernels that only depend on $r = || \mathbf x^\prime - \mathbf x ||_2$ requiring you to implement $k(r)$ or $k(r^2)$, $k(r) = k(\mathbf x^\prime, \mathbf x)$.
+
+**Prior Distributions:** Through the `GPRConstructor`, researchers can easily define and adjust priors for GP hyperparameters, allowing more precise control over model behaviour and incorporating domain-specific knowledge effectively. This is shown in the typing of `GPPrior` and `GPPriorFactory` in `types.py`:
+
+```{python}
+# | eval: false
+
+# Prior types
+GPPrior = Mapping[str, Union[Parameter, Numeric]]
+"""
+Type for Gaussian Process priors.
+
+The keys are the paths to the priors, e.g `.kernel.lengthscales`
+or `.kernel.kernels[1].variance`.
+Values:
+    - `Parameter` used for transformed parameters e.g: Softplus.
+    - `Numeric` used for numeric initial values.
+"""
+GPPriorFactory = Callable[..., GPPrior]
+"""
+Type for Gaussian Process prior factories.
+
+Used for defining a pattern that will dynamically generate priors
+for each GPR model.
+"""
+```
+
+This gives a clear, type-checked definition of a parameter of `GPRConstructor` (`GPPriorFactory`). That being a mapping (dictionary) from a string describing its position in the kernel, to either a GPflow `Parameter` – which can be any transformed number for MLE or a TensorFlow Probability prior for MCMC – or just an unconstrained number.\
+This information is all available in the docstring, so is easy to find whilst coding and also gets exported to the auto-generated documentation; there are also examples of each in `backend/priors.py`.
+
+**Inference Techniques:** The modular nature of GPCell allows straightforward integration of different inference techniques, ranging from classical maximum likelihood estimation (MLE) to more complex Bayesian approaches such as variational inference or MCMC.
+
+**MCMC via TensorFlow Probability:** As an example custom/additional inference technique, MCMC functionality has been added to the library just by adding code in two objects – `GPRConstructor` then `GaussianProcess`:
+
+```{python}
+# | eval: false
+
+# GPRConstructor
+match self.inf:
+    case "MCMC":
+        likelihood = Gaussian()
+        model = GPMC((X, y), kernel, likelihood)
+```
+
+This is a simple addition to the `self.inf` check that instantiates a GPflow `GPMC` (MCMC) model instead of a `GPR` (MLE) model, with the rest of the object being the same.
+
+```{python}
+# | eval: false
+
+# GaussianProcess
+match gp_reg:
+    case GPR():
+        # Keep the posterior for predictions
+        self.fit_gp = gp_reg.posterior()
+    case GPMC():
+        (
+            self.fit_gp,
+            self.samples,
+            self.parameter_samples,
+            self.param_to_name,
+            self.name_to_index,
+        ) = self._run_mcmc(gp_reg, sampler=self.mcmc_sampler)
+```
+
+This directly matches against the model type, improving safety and reducing the number of extra parameters needed.\
+Earlier in the `GaussianProcess` fit method, both `GPR` and `GPMC` models are optimised to their MLE positions. This means that `GPR` models are already fit and only the posterior is taken, whereas the `GPMC` is then ran through either a Hamiltonian Monte Carlo (HMC) or No-U-Turn Sampler (NUTS) implemented in TensorFlow Probability, according to `sampler`.
