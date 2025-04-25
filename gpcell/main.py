@@ -27,6 +27,8 @@ from numpy import (
 from numpy.random import uniform, multivariate_normal
 from scipy.signal import find_peaks
 from scipy.interpolate import CubicSpline
+from scipy.stats import gaussian_kde
+from arviz import rhat, ess
 
 from gpflow.kernels import White, Matern12, Cosine, Kernel
 # from gpflow.utilities import print_summary
@@ -41,6 +43,8 @@ from gpcell.backend import (
     hes_ouosc_prior,
     ou_trainables,
     ouosc_trainables,
+    ou_hyperparameters,
+    ouosc_hyperparameters,
 )
 from .utils import (
     load_data,
@@ -570,7 +574,7 @@ class OscillatorDetector:
             ou_trainables,
             ouosc_priors,
             ouosc_trainables,
-            10,
+            2,
             mcmc=True,
         )
 
@@ -884,17 +888,17 @@ class OscillatorDetector:
         elif target == "MCMC":
             N = min(self.N, 12)
             row, col = N, 2
-            fig = plt.figure(figsize=(plot_size * col, plot_size * row))
+            fig = plt.figure(figsize=(2.5 * plot_size * col, plot_size * row))
 
             for i, (x, y, ou, ouosc) in enumerate(
                 zip(self.X, self.Y_detrended, self.ou_GPs, self.ouosc_GPs)
             ):
                 plt.subplot(row, col, 2 * i + 1)
-                ou[0].plot_samples()
+                ou[0].plot_samples(ou_hyperparameters)
                 plt.title(f"OU cell {i + 1}")
 
                 plt.subplot(row, col, 2 * i + 2)
-                ouosc[0].plot_samples()
+                ouosc[0].plot_samples(ouosc_hyperparameters)
                 plt.title(f"OU+Oscillator cell {i + 1}")
 
         elif target == "periods":

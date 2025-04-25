@@ -24,6 +24,8 @@ from .priors import (
     ouosc_trainables,
     sim_ou_prior,
     sim_ouosc_prior,
+    ou_hyperparameters,
+    ouosc_hyperparameters,
 )
 from .gpr_constructor import GPRConstructor
 from .gaussian_process import GaussianProcess
@@ -48,6 +50,8 @@ __all__ = [
     "ouosc_trainables",
     "sim_ou_prior",
     "sim_ouosc_prior",
+    "ou_hyperparameters",
+    "ouosc_hyperparameters",
 ]
 
 

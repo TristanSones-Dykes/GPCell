@@ -1,8 +1,9 @@
 # Standard Library Imports
-from typing import Optional, Tuple, cast
+from typing import List, Optional, Tuple, cast
 
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
+import tensorflow as tf
 
 # Direct Namespace Imports
 from gpflow.optimizers import Scipy, SamplingHelper
@@ -12,12 +13,11 @@ from gpflow.utilities import to_default_float as f64, parameter_dict
 from gpflow.kernels import Kernel
 
 from tensorflow_probability import mcmc
-from tensorflow import function, Tensor
+from tensorflow import Tensor
 
 # Internal Project Imports
 from ._types import Ndarray
 from .gpr_constructor import GPRConstructor
-from .priors import ou_hyperparameters, ouosc_hyperparameters
 
 
 NOCACHE = PrecomputeCacheType.NOCACHE
@@ -122,50 +122,36 @@ class GaussianProcess:
         sampler: str = "hmc",
     ):
         # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
-        sampler_helper = SamplingHelper(
+        hmc_helper = SamplingHelper(
             model.log_posterior_density, model.trainable_parameters
         )
 
         # define model
-        match sampler:
-            case "hmc":
-                sampler = mcmc.HamiltonianMonteCarlo(
-                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
-                    num_leapfrog_steps=10,
-                    step_size=0.01,
-                )
-                adaptive_sampler = mcmc.SimpleStepSizeAdaptation(
-                    sampler,
-                    num_adaptation_steps=10,
-                    target_accept_prob=f64(0.75),
-                    adaptation_rate=0.1,
-                )
-            case "nuts":
-                sampler = mcmc.NoUTurnSampler(
-                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
-                    step_size=f64(0.01),
-                )
-                adaptive_sampler = mcmc.DualAveragingStepSizeAdaptation(
-                    sampler,
-                    num_adaptation_steps=int(0.8 * num_burnin_steps),
-                    target_accept_prob=f64(0.75),
-                )
-            case _:
-                raise ValueError(f"Unknown sampler: {sampler}. Use 'hmc' or 'nuts'.")
+        hmc = mcmc.HamiltonianMonteCarlo(
+            target_log_prob_fn=hmc_helper.target_log_prob_fn,
+            num_leapfrog_steps=10,
+            step_size=0.01,
+        )
+        adaptive_hmc = mcmc.SimpleStepSizeAdaptation(
+            hmc,
+            num_adaptation_steps=10,
+            target_accept_prob=f64(0.75),
+            adaptation_rate=0.1,
+        )
 
-        @function(reduce_retracing=True)
+        @tf.function(reduce_retracing=True)
         def run_chain_fn():
             return mcmc.sample_chain(
                 num_results=num_samples,
                 num_burnin_steps=num_burnin_steps,
-                current_state=sampler_helper.current_state,
-                kernel=adaptive_sampler,
+                current_state=hmc_helper.current_state,
+                kernel=adaptive_hmc,
                 trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
             )
 
         # run chain and extract samples
         samples, _ = run_chain_fn()  # type: ignore
-        parameter_samples = sampler_helper.convert_to_constrained_values(samples)
+        parameter_samples = hmc_helper.convert_to_constrained_values(samples)
 
         # map parameter names to indices
         param_to_name = {param: name for name, param in parameter_dict(model).items()}
@@ -178,20 +164,14 @@ class GaussianProcess:
 
     def log_posterior(
         self,
-        y: Optional[Ndarray] = None,
     ) -> Ndarray:
         """
         Compute the log posterior density of the model
 
-        Parameters
-        ----------
-        y: Optional[Ndarray]
-                Observed target values
-
         Returns
         -------
         Ndarray
-                Log posterior density
+            Log posterior density
         """
         return self.log_posterior_density
 
@@ -237,33 +217,20 @@ class GaussianProcess:
                 except Exception as e:
                     print("Problem with new data to plot: ", e)
 
-    def plot_samples(
-        self,
-    ):
+    def plot_samples(self, hyperparameters: List[str]):
         """
         Plot the samples from the MCMC chain
 
         Parameters
         ----------
-        samples: Sequence[Tensor]
-                Samples from the MCMC chain
-        parameters
-                Model parameters
-        y_axis_label: str
-                Label for y-axis
-        param_to_name: dict
-                Mapping of parameter names
+        hyperparameters: List[str]
+                List of hyperparameters to plot
         """
-        match self.constructor.kernel:
-            case kernel if isinstance(kernel, Kernel):
-                hyperparameters = ou_hyperparameters
-            case _:
-                hyperparameters = ouosc_hyperparameters
-
+        # plot samples
         for param_name in hyperparameters:
             plt.plot(
                 self.parameter_samples[self.name_to_index[param_name]], label=param_name
             )
-        plt.legend(bbox_to_anchor=(1.0, 1.0))
+        plt.legend()
         plt.xlabel("HMC iteration")
         plt.ylabel("hyperparameter value")
