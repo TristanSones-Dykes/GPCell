@@ -59,7 +59,10 @@ Thus, to create a pair of periodic and aperiodic kernels, they can take the OU k
 Such that, if the OUosc model has a significantly better fit on a trace despite added model complexity, then it can be reasonably concluded that the trace is oscillatory.
 
 \newpage
+## Bayesian Classification Method
+TODO: Describe how I am using MCMC to classify the time series into oscillatory and non-oscillatory, using a fully bayesian method.
 
+\newpage
 ## GPCell
 
 Utilizing the GPflow library, which is based on TensorFlow, GPCell provides a user-friendly interface for researchers, with an `OscillatorDetector` class specifically designed for @phillips_identifying_2017's, and similar, use-cases. It also has unit tests to verify correctness, a strong type system to aid development and upkeep, and a suite of general utility functions that automate the model fitting process, using a multiprocessing pipeline to increase fitting speed.
@@ -168,7 +171,7 @@ class Matern12(IsotropicStationary):
         return self.variance * tf.exp(-r)
 ```
 
-This uses GPflow's `IsotropicStationary` kernel base class, which is for stationary kernels that only depend on the Euclidean distance $r = || \mathbf x^\prime - \mathbf x ||_2$, requiring only the implementation of $k(r)$ or $k(r^2)$, $k(r) = k(\mathbf x^\prime, \mathbf x)$.
+It uses GPflow's `IsotropicStationary` kernel base class, which is for stationary kernels that only depend on the Euclidean distance $r = || \mathbf x^\prime - \mathbf x ||_2$, requiring only the implementation of $k(r)$ or $k(r^2)$, $k(r) = k(\mathbf x^\prime, \mathbf x)$.
 
 **Prior Distributions:** Through `GPRConstructor`, researchers can easily define and adjust priors for GP hyperparameters, allowing more precise control over model behaviour and incorporating domain-specific knowledge effectively. This is shown in the typing of `GPPrior` and `GPPriorFactory` in `types.py`:
 

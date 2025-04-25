@@ -1,21 +1,25 @@
 # Results
 
-## Reproducibility of Prior Results
-ROC figures comparing your library against previous MATLAB implementation (both GP and Lomb-Scargle methods)
+## Reproducing Previous Results
 
-Explicit statistical comparison (AUC values)
+A key plot in @phillips_identifying_2017 is the ROC curve comparing the GP method to the Lomb-Scargle method. It is reproduced below, with added AUC values for both methods.
 
-## Performance Analysis
+![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png)
+
+This shows that GPCell fits the same quality models as the MATLAB implementation, on MATLAB generated data. The ROC curves don't have margins on the original plot, adding them makes spotting discrepancies between the models easier.
+
+The added AUC values give a lot of information; despite the $\sigma^2 = 0.5$ ROC for the GP method looking far worse than the others, the AUC shows us it is, quantitatively, not as dissimilar from the others as it looks.
+
+## Performance Improvements
+
 Figures and tables showing speed improvements (e.g., parallelisation with Joblib, simulation with numba)
 
 Discussion on computational resources needed (RAM, CPU/GPU)
 
-## MCMC Implementation
-Example MCMC fits (trace plots, parameter distributions)
+## MCMC Model
 
-Discuss implications and accuracy improvements from MCMC inference
+Example MCMC fits (trace plots, parameter distributions).
 
-## Practical Demonstration and Extensibility
-Showcase practical use-cases (example time-series, how results are interpreted)
+Show how it works on the data, performance of classification.
 
-Short code snippets demonstrating extensibility (showing actual examples using your library)
+Discuss implications and accuracy improvements from MCMC inference.
