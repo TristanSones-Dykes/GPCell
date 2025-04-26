@@ -10,7 +10,7 @@ Formally, a GP is defined as a collection of random variables, any finite number
 
 $$
 f(\mathbf x) \thicksim GP(m(\mathbf x), k(\mathbf x, \mathbf x^\prime))
-$$
+$$ {#eq-objective}
 
 For practical applications, and in our case, the mean function is often assumed to be zero ($m(\mathbf x) = 0$) as we can remove trends from our data and then focus on the kernel component which differentiates our models.
 
@@ -52,17 +52,45 @@ By modelling gene expression time-series generally using the Chemical Master Equ
 Thus, to create a pair of periodic and aperiodic kernels, they can take the OU kernel as it is already aperiodic and augment the OU kernel with a cosine kernel to create a quasi-periodic oscillatory process.
 
 \begin{align}
-\mathbf K_{OU}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau) \\
-\mathbf K_{OUosc}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau)\cos(\beta \tau)
+\mathbf K_{OU}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau) \label{OU_kernel} \\
+\mathbf K_{OUosc}(\tau) &= \sigma_{\small OU}\exp(-\alpha \tau)\cos(\beta \tau) \label{OUosc_kernel}
 \end{align}
 
 Such that, if the OUosc model has a significantly better fit on a trace despite added model complexity, then it can be reasonably concluded that the trace is oscillatory.
 
 \newpage
+
 ## Bayesian Classification Method
-TODO: Describe how I am using MCMC to classify the time series into oscillatory and non-oscillatory, using a fully bayesian method.
+
+We develop a Bayesian classification model to classify single-cell gene expression time series as oscillatory or non-oscillatory. This approach builds upon the methodology of @phillips_identifying_2017, but we extend it by using Bayesian inference (via MCMC) for hypothesis testing and uncertainty estimation. The goal is to determine, for each single-cell time course, whether there is statistically significant evidence of an oscillatory pattern as opposed to aperiodic noise. Below, we describe the modeling setup, prior choices, inference procedure, and model comparison techniques used in GPCell’s oscillation detector.
+
+### Overall pipeline
+
+Our method follows mostly @phillips_identifying_2017 until the bootstrapping section. We have calculated the background noise and detrended the input cell traces, then created multiple replicate models for each cell that have been initialised to their maximum likelihood solution (recommended in GPflow docs; @mcmc_gpflow). However, we have only fit the OUosc kernel models (\ref{OUosc_kernel}), as they are all that is needed for the Bayes factor calculation.
+
+Following this, we sample their chains with burn-in, creating posterior samples. Then we pool the traces and assess their convergence using the Gelman-Rubin $\hat R$ and Effective Sample Size (ESS); @gelman1992, @kong_ess.\
+Finally, we calculate the Bayes factor using the MCMC samples and classify into oscillatory and non-oscillatory with a cutoff.
+
+### Model Selection and Classification
+
+The next step is to identify the better model and thus, whether or not each trace is oscillatory. In order to do this we calculate the Bayes factor, using the Savage-Dickey ratio; @wagenmakers2010.
+
+$$
+BF_{01} = \frac{p(D|H_0)}{p(D|H_1)} = \frac{p(\beta = 0 | D, H_1)}{p(\beta = 0 | H_1)}
+$$ {#eq-bayes-factor}
+
+This is possible as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
+
+We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this by using a kernel density estimate
+
+### **Prior choices**
+
+Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, our priors need to have a support of $[0, +\infty)$ for $\beta$ as well as being positive and well-behaved.
+
+We assign priors to the GP hyperparameters to complete the Bayesian specification. Our priors are chosen to be **weakly informative**, reflecting general knowledge of typical oscillation timescales without being too restrictive. For the OU kernel, the decay rate α\alphaα gets a log-normal or broad gamma prior (ensuring positivity) centered on a timescale on the order of the time series duration. The rationale is to allow a wide range of aperiodic fluctuation rates, but avoid extremely large α\alphaα (which would imply implausibly rapid, almost white-noise fluctuations) or extremely small α\alphaα (which would imply an unrealistically long memory). The signal variance σ2\sigma\^2σ2 has a prior that is likewise log-normal, covering the range of observed signal amplitudes (we base this on the variance of the detrended time series). For the oscillatory model, we use similar priors for α\alphaα and σ2\sigma\^2σ2, and additionally need a prior for the frequency β\betaβ. We choose a prior over β\betaβ that corresponds to plausible oscillation periods in our biological context. For example, if we expect oscillations in the range of 2–8 hours (as for ultradian rhythms like Hes1 or cell-cycle), we might put a prior on β\betaβ centered around say β=2π/(4 hours)\beta = 2\pi/(4\~\text{hours})β=2π/(4 hours) with broad variance to cover 2–8h (in angular frequency units). If little is known *a priori*, a uniform prior on a range of frequencies or a log-uniform prior on period can be used. By incorporating these priors, we impose a slight penalty on very high-frequency or very low-frequency oscillations, which helps regularize the model fitting and avoids overfitting noise as a fast “oscillation.” All priors are chosen such that the Bayes factor computation (see below) is not overly sensitive to prior extremes – we tested that reasonable variations in priors do not qualitatively change the classification, only when priors become highly informative (which we avoid) do they dominate the evidence.
 
 \newpage
+
 ## GPCell
 
 Utilizing the GPflow library, which is based on TensorFlow, GPCell provides a user-friendly interface for researchers, with an `OscillatorDetector` class specifically designed for @phillips_identifying_2017's, and similar, use-cases. It also has unit tests to verify correctness, a strong type system to aid development and upkeep, and a suite of general utility functions that automate the model fitting process, using a multiprocessing pipeline to increase fitting speed.
