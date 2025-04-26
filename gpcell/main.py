@@ -948,6 +948,7 @@ class OscillatorDetector:
 
                     # plot marginal posteriors
                     ouosc[0].plot_posterior_marginal(ouosc_hyperparameters[j])
+                    ouosc[0].plot_posterior_marginal(ouosc_hyperparameters[j], True)
 
         elif target == "periods":
             if self.periods is None:

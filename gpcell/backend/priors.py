@@ -3,7 +3,7 @@
 # Third-Party Library Imports
 
 # Direct Namespace Imports
-from numpy import float64, pi
+from numpy import float64, log, pi, sqrt
 from numpy.random import uniform
 
 from tensorflow_probability import distributions as tfd
@@ -83,6 +83,27 @@ def hes_mcmc_ouosc_priors(noise: Numeric) -> GPPrior:
         "kernel.kernels[1].lengthscales.prior": tfd.Uniform(
             low=f64(0.1), high=f64(4.0)
         ),
+        "likelihood.variance": noise**2,
+    }
+
+
+# convert uniform to lognormal (match moments)
+uniform_param_list = [(0.1, 2.0), (0.1, 4.0)]
+mean_list = [(a + b) / 2 for a, b in uniform_param_list]
+var_list = [((b - a) ** 2) / 12 for a, b in uniform_param_list]
+
+# Lognormal(mean, std)
+lognormal_param_list = []
+for m, v in zip(mean_list, var_list):
+    s = sqrt(log(v / m**2 + 1))
+    mu = log(m) - s**2 / 2
+    lognormal_param_list.append((mu, s))
+
+
+def savage_d_ou_priors(noise: Numeric) -> GPPrior:
+    return {
+        "kernel.lengthscales.prior": tfd.LogNormal(loc=f64(0.0), scale=f64(1.0)),
+        "kernel.variance.prior": tfd.LogNormal(loc=f64(-0.69314718), scale=f64(1.0)),
         "likelihood.variance": noise**2,
     }
 
