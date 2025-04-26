@@ -92,7 +92,16 @@ class OscillatorDetector:
         # validate arguments
         if not all(
             [
-                x in {"background", "detrend", "BIC", "LLR", "periods", "MCMC"}
+                x
+                in {
+                    "background",
+                    "detrend",
+                    "BIC",
+                    "LLR",
+                    "periods",
+                    "MCMC",
+                    "MCMC_marginal",
+                }
                 for x in self.plots
             ]
         ):
@@ -579,8 +588,10 @@ class OscillatorDetector:
         )
 
         # plot
-        # if "MCMC" in self.plots:
-        #     self.generate_plot("MCMC")
+        if "MCMC" in self.plots:
+            self.generate_plot("MCMC")
+        if "MCMC_marginal" in self.plots:
+            self.generate_plot("MCMC_marginal")
 
     def _fit_ou_ouosc(
         self,
@@ -808,6 +819,7 @@ class OscillatorDetector:
             "LLR": "llr_plot",
             "periods": "periods_plot",
             "MCMC": "mcmc_plot",
+            "MCMC_marginal": "marginal_plot",
         }
 
         if target not in plot_attributes:
@@ -817,7 +829,7 @@ class OscillatorDetector:
         fig = None  # Initialize the figure
 
         if target == "background":
-            M = min(self.M, 9)
+            M = min(self.M, 12)
             dim = int(ceil(sqrt(M)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
@@ -839,14 +851,14 @@ class OscillatorDetector:
                 plt.title(f"Background {i + 1}")
 
         elif target == "detrend":
-            N = min(self.N, 12)
-            dim = int(ceil(sqrt(N)))
+            row = min(self.N, 12)
+            dim = int(ceil(sqrt(row)))
             fig = plt.figure(figsize=(plot_size * dim, plot_size * dim))
 
             for i, (x, y, y_detrended, m) in enumerate(
                 zip(self.X, self.Y, self.Y_detrended, self.detrend_GPs)
             ):
-                if i == N:
+                if i == row:
                     break
 
                 y_standardised = (y - mean(y)) / std(y)
@@ -886,20 +898,56 @@ class OscillatorDetector:
             plt.title("LLRs of synthetic non-oscillatory OU cells")
 
         elif target == "MCMC":
-            N = min(self.N, 12)
-            row, col = N, 2
+            # deal with sometimes not fitting OU GPs
+            row, col = min(self.N, 12), 2
+            if not isinstance(self.ou_GPs, list):
+                col = 1
+                ou_GPs = [0 for _ in range(row)]
+            else:
+                ou_GPs = self.ou_GPs
+
             fig = plt.figure(figsize=(2.5 * plot_size * col, plot_size * row))
 
             for i, (x, y, ou, ouosc) in enumerate(
-                zip(self.X, self.Y_detrended, self.ou_GPs, self.ouosc_GPs)
+                zip(self.X, self.Y_detrended, ou_GPs, self.ouosc_GPs)
             ):
+                # if only fit OU+Oscillator, don't plot OU
+                if col == 1:
+                    plt.subplot(row, col, i + 1)
+                    ouosc[0].plot_samples(ouosc_hyperparameters)
+                    plt.title(f"OU+Oscillator cell {i + 1}")
+                    continue
+
                 plt.subplot(row, col, 2 * i + 1)
-                ou[0].plot_samples(ou_hyperparameters)
+                ou[0].plot_samples(ou_hyperparameters)  # type: ignore
                 plt.title(f"OU cell {i + 1}")
 
                 plt.subplot(row, col, 2 * i + 2)
                 ouosc[0].plot_samples(ouosc_hyperparameters)
                 plt.title(f"OU+Oscillator cell {i + 1}")
+
+        elif target == "MCMC_marginal":
+            # plot the marginal posterior distributions of the OU+Oscillator model
+            row, col = min(self.N, 12), 3
+            fig = plt.figure(figsize=(2 * plot_size * col, plot_size * row))
+
+            for i, ouosc in enumerate(self.ouosc_GPs):
+                # select first subplot of row, add ylabel
+                plt.subplot(row, col, 3 * i + 1)
+                plt.ylabel(f"Cell {i + 1} Count")
+
+                for j in range(3):
+                    plt.subplot(row, col, 3 * i + j + 1)
+
+                    # if first iteration, add title
+                    if i == 0:
+                        plt.title(f"{ouosc_hyperparameters[j]}")
+                    # if last iteration, add xlabel
+                    if i == row - 1:
+                        plt.xlabel(f"{ouosc_hyperparameters[j]}")
+
+                    # plot marginal posteriors
+                    ouosc[0].plot_posterior_marginal(ouosc_hyperparameters[j])
 
         elif target == "periods":
             if self.periods is None:

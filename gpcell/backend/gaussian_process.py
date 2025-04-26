@@ -10,7 +10,6 @@ from gpflow.optimizers import Scipy, SamplingHelper
 from gpflow.models import GPR, GPMC
 from gpflow.posteriors import PrecomputeCacheType
 from gpflow.utilities import to_default_float as f64, parameter_dict
-from gpflow.kernels import Kernel
 
 from tensorflow_probability import mcmc
 from tensorflow import Tensor
@@ -234,3 +233,29 @@ class GaussianProcess:
         plt.legend()
         plt.xlabel("HMC iteration")
         plt.ylabel("hyperparameter value")
+
+    def plot_posterior_marginal(self, hyperparameter: str, constrained: bool = False):
+        """
+        Plot the posterior marginal of a hyperparameter
+
+        Parameters
+        ----------
+        hyperparameter: str
+                Hyperparameter to plot
+        """
+        # plot posterior marginal
+        plt.hist(
+            self.parameter_samples[self.name_to_index[hyperparameter]],
+            bins=20,
+        )
+
+        # if constrained:
+        #     samples = self.parameter_samples
+        # else:
+        #     samples = self.samples
+
+        # # plot posterior marginal
+        # plt.hist(
+        #     samples[self.name_to_index[hyperparameter]],
+        #     bins=20,
+        # )

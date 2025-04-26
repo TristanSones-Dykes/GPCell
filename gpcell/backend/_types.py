@@ -30,7 +30,7 @@ Ndarray = NDArray[float64] | NDArray[int32]
 Numeric = Union[float, int, float64, int32]
 
 # Prior types
-GPPrior = Mapping[str, Union[Parameter, Numeric]]
+GPPrior = Mapping[str, Union[Parameter, Numeric, bool]]
 """
 Type for Gaussian Process priors.
 

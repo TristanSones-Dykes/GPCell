@@ -1,5 +1,5 @@
 # Standard Library Imports
-from typing import Mapping, Tuple
+from typing import Tuple, Union
 
 # Third-Party Library Imports
 import tensorflow_probability as tfp
@@ -12,7 +12,7 @@ from numpy import empty, float64, inf, int32, ndarray, log
 from numba import njit
 
 # Internal Project Imports
-from ._types import GPPrior
+from ._types import GPPrior, Numeric
 
 
 # ----------------------------------------------#
@@ -20,7 +20,7 @@ from ._types import GPPrior
 # ----------------------------------------------#
 
 
-def multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
+def multiple_assign(module: Module, parameters: GPPrior) -> None:
     """
     Assigns parameters in a dictionary to the Module (tf.Module or gpflow.Module)
 
@@ -35,7 +35,9 @@ def multiple_assign(module: Module, parameters: Mapping[str, GPPrior]) -> None:
         _set_parameter_by_key(module, key, value)
 
 
-def _set_parameter_by_key(module: Module, key: str, value: GPPrior):
+def _set_parameter_by_key(
+    module: Module, key: str, value: Union[Parameter, Numeric, bool]
+):
     """
     Sets a parameter in a module by key
 
@@ -68,6 +70,12 @@ def _set_parameter_by_key(module: Module, key: str, value: GPPrior):
             setattr(target, parts[-1], value)
         case tfp.distributions.Uniform():
             setattr(target, parts[-1], value)
+        case bool():
+            # MCMC constrained/unconstrained
+            if parts[-1] == "prior_on":
+                setattr(target, parts[-1], value)
+            else:
+                raise ValueError(f"Invalid boolean parameter: {key}")
         case _:
             getattr(target, parts[-1]).assign(value)
 

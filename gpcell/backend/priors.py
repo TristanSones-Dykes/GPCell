@@ -66,7 +66,7 @@ ouosc_trainables = {
 # --- MCMC prior generators --- #
 
 
-def mcmc_ou_priors(noise: Numeric) -> GPPrior:
+def hes_mcmc_ou_priors(noise: Numeric) -> GPPrior:
     return {
         "kernel.lengthscales.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
         "kernel.variance.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
@@ -74,7 +74,7 @@ def mcmc_ou_priors(noise: Numeric) -> GPPrior:
     }
 
 
-def mcmc_ouosc_priors(noise: Numeric) -> GPPrior:
+def hes_mcmc_ouosc_priors(noise: Numeric) -> GPPrior:
     return {
         "kernel.kernels[0].lengthscales.prior": tfd.Uniform(
             low=f64(0.1), high=f64(2.0)
