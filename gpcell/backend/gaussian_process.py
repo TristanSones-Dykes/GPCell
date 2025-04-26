@@ -252,6 +252,6 @@ class GaussianProcess:
         # plot constrained posterior marginal
         if constrained:
             plt.hist(
-                self.samples[:, self.name_to_index[hyperparameter]],
+                self.samples[self.name_to_index[hyperparameter]],
                 bins=20,
             )

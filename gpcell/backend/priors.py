@@ -100,10 +100,29 @@ for m, v in zip(mean_list, var_list):
     lognormal_param_list.append((mu, s))
 
 
-def savage_d_ou_priors(noise: Numeric) -> GPPrior:
+def sd_ou_priors(noise: Numeric) -> GPPrior:
     return {
-        "kernel.lengthscales.prior": tfd.LogNormal(loc=f64(0.0), scale=f64(1.0)),
-        "kernel.variance.prior": tfd.LogNormal(loc=f64(-0.69314718), scale=f64(1.0)),
+        "kernel.lengthscales.prior": tfd.LogNormal(
+            loc=f64(lognormal_param_list[0][0]), scale=f64(lognormal_param_list[0][1])
+        ),
+        "kernel.variance.prior": tfd.LogNormal(
+            loc=f64(lognormal_param_list[0][0]), scale=f64(lognormal_param_list[0][1])
+        ),
+        "likelihood.variance": noise**2,
+    }
+
+
+def sd_ouosc_priors(noise: Numeric) -> GPPrior:
+    return {
+        "kernel.kernels[0].lengthscales.prior": tfd.LogNormal(
+            loc=f64(lognormal_param_list[0][0]), scale=f64(lognormal_param_list[0][1])
+        ),
+        "kernel.kernels[0].variance.prior": tfd.LogNormal(
+            loc=f64(lognormal_param_list[0][0]), scale=f64(lognormal_param_list[0][1])
+        ),
+        "kernel.kernels[1].lengthscales.prior": tfd.LogNormal(
+            loc=f64(lognormal_param_list[1][0]), scale=f64(lognormal_param_list[1][1])
+        ),
         "likelihood.variance": noise**2,
     }
 

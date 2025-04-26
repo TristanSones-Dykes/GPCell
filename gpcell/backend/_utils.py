@@ -2,10 +2,10 @@
 from typing import Tuple, Union
 
 # Third-Party Library Imports
-import tensorflow_probability as tfp
 import numpy as np
 
 # Direct Namespace Imports
+from tensorflow_probability import distributions as tfd
 from tensorflow import Module
 from gpflow import Parameter
 from numpy import empty, float64, inf, int32, ndarray, log
@@ -36,7 +36,7 @@ def multiple_assign(module: Module, parameters: GPPrior) -> None:
 
 
 def _set_parameter_by_key(
-    module: Module, key: str, value: Union[Parameter, Numeric, bool]
+    module: Module, key: str, value: Union[Parameter, Numeric, str]
 ):
     """
     Sets a parameter in a module by key
@@ -68,16 +68,24 @@ def _set_parameter_by_key(
     match value:
         case Parameter():
             setattr(target, parts[-1], value)
-        case tfp.distributions.Uniform():
+        case tfd.Uniform():
             setattr(target, parts[-1], value)
-        case bool():
+        case tfd.LogNormal():
+            setattr(target, parts[-1], value)
+        case str():
             # MCMC constrained/unconstrained
             if parts[-1] == "prior_on":
-                setattr(target, parts[-1], value)
+                # print(f"Setting {key} to {value}")
+                target = value
             else:
-                raise ValueError(f"Invalid boolean parameter: {key}")
+                raise ValueError(f"Invalid value type for {key}: {type(value)}")
         case _:
-            getattr(target, parts[-1]).assign(value)
+            # try block
+            try:
+                getattr(target, parts[-1]).assign(value)
+            except AttributeError:
+                # If the attribute is not a Parameter, assign it directly
+                setattr(target, parts[-1], value)
 
 
 # -----------------------------#
