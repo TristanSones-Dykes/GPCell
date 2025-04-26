@@ -15,6 +15,7 @@ from numpy import (
     log,
     mean,
     sqrt,
+    # stack,
     std,
     array,
     linspace,
@@ -575,17 +576,75 @@ class OscillatorDetector:
         if self.verbose:
             print("\nFitting MCMC...")
 
-        # fit OU and OU+Oscillator models
-        self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
+        ouosc_kernel = [Matern12, Cosine]
+        K = 2
+
+        self.ouosc_GPs = fit_processes_joblib(
             self.X,
             self.Y_detrended,
-            ou_priors,
-            ou_trainables,
+            ouosc_kernel,
             ouosc_priors,
-            ouosc_trainables,
-            2,
+            replicates=K,
+            trainable=ouosc_trainables,
             mcmc=True,
+            verbose=self.verbose,
         )
+
+        # fit OU and OU+Oscillator models
+        # self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
+        #     self.X,
+        #     self.Y_detrended,
+        #     ou_priors,
+        #     ou_trainables,
+        #     ouosc_priors,
+        #     ouosc_trainables,
+        #     2,
+        #     mcmc=True,
+        # )
+
+        # # extract samples
+        # gps = [gp_list[0] for gp_list in self.ouosc_GPs]
+        # samples_list = [gp.samples for gp in gps]
+        # parameter_samples_list = [gp.parameter_samples for gp in gps]
+        # param_to_name_list = [gp.param_to_name for gp in gps]
+        # trainable_parameters_list = [gp.trainable_parameters for gp in gps]
+
+        # def marginal_samples(samples, parameters, param_to_name, y_axis_label):
+        #     fig, axes = plt.subplots(
+        #         1, len(param_to_name), figsize=(15, 3), constrained_layout=True
+        #     )
+        #     for ax, val, param in zip(axes, samples, parameters):
+        #         ax.hist(stack(val).flatten(), bins=20)
+        #         ax.set_title(param_to_name[param])
+        #     fig.suptitle(y_axis_label)
+        #     plt.show()
+
+        # for i, (
+        #     samples,
+        #     parameter_samples,
+        #     trainable_parameters,
+        #     param_to_name,
+        # ) in enumerate(
+        #     zip(
+        #         samples_list,
+        #         parameter_samples_list,
+        #         trainable_parameters_list,
+        #         param_to_name_list,
+        #     )
+        # ):
+        #     # plot marginal samples
+        #     marginal_samples(
+        #         samples,
+        #         trainable_parameters,
+        #         param_to_name,
+        #         "Unconstrained marginal samples of OU+Oscillator model parameters",
+        #     )
+        #     marginal_samples(
+        #         parameter_samples,
+        #         trainable_parameters,
+        #         param_to_name,
+        #         "Constrained marginal samples of OU+Oscillator model parameters",
+        #     )
 
         # plot
         if "MCMC" in self.plots:
@@ -900,11 +959,11 @@ class OscillatorDetector:
         elif target == "MCMC":
             # deal with sometimes not fitting OU GPs
             row, col = min(self.N, 12), 2
-            if not isinstance(self.ou_GPs, list):
+            if not hasattr(self, "ou_GPs"):
                 col = 1
                 ou_GPs = [0 for _ in range(row)]
             else:
-                ou_GPs = self.ou_GPs
+                ou_GPs = self.ou_GPs  # type: ignore
 
             fig = plt.figure(figsize=(2.5 * plot_size * col, plot_size * row))
 

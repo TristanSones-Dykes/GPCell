@@ -111,6 +111,7 @@ class GaussianProcess:
                     self.parameter_samples,
                     self.param_to_name,
                     self.name_to_index,
+                    self.trainable_parameters,
                 ) = self._run_mcmc(gp_reg)
 
     def _run_mcmc(
@@ -159,7 +160,13 @@ class GaussianProcess:
             for i, param in enumerate(model.trainable_parameters)
         }
 
-        return samples, parameter_samples, param_to_name, name_to_index
+        return (
+            samples,
+            parameter_samples,
+            param_to_name,
+            name_to_index,
+            model.trainable_parameters,
+        )
 
     def log_posterior(
         self,
