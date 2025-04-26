@@ -72,35 +72,29 @@ class GPRConstructor:
             case _:
                 raise ValueError("Invalid MCMC value")
 
-        # assign priors
         prior_dict = self.prior_gen()
+
+        # if MCMC, set priors on unconstrained space
+        if self.mcmc and len(prior_dict) == 4:
+            # create (prior: "unconstrained") mapping
+            constrain_map = {}
+            for key, _ in prior_dict.items():
+                # initialise path and remove prior if it exists in path
+                attrs = key.split(".")
+                if attrs[-1] == "prior":
+                    attrs.pop()
+
+                # add to constrain_map
+                attrs.append("prior_on")
+                new_key = ".".join(attrs)
+                constrain_map[new_key] = "unconstrained"
+
+            # set priors to unconstrained parameters
+            multiple_assign(model, constrain_map)
+
+        # assign priors
         multiple_assign(model, prior_dict)
-
-        # if MCMC, set prior_on to unconstrained parameters
-        # if self.mcmc and len(prior_dict) == 3:
-        #     # create (prior: "unconstrained") mapping
-        #     constrain_map = {}
-        #     for key, _ in prior_dict.items():
-        #         # initialise path and remove prior if it exists in path
-        #         attrs = key.split(".")
-        #         if attrs[-1] == "prior":
-        #             attrs.pop()
-
-        #         # add to constrain_map
-        #         attrs.append("prior_on")
-        #         new_key = ".".join(attrs)
-        #         constrain_map[new_key] = "unconstrained"
-
-        #     # set priors to unconstrained parameters
-        #     multiple_assign(model, constrain_map)
-
-        #     # print first prior_on value
-        #     for key, _ in constrain_map.items():
-        #         attrs = key.split(".")
-        #         obj = model
-        #         for attr in attrs[:-1]:
-        #             obj = getattr(obj, attr)
-        #         print(f"Value at {key}: {getattr(obj, attrs[-1])}")
+        # print(model.likelihood.variance.prior_on)
 
         # set trainable parameters
         for param, trainable in self.trainable.items():

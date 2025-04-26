@@ -75,7 +75,7 @@ def _set_parameter_by_key(
         case str():
             # MCMC constrained/unconstrained
             if parts[-1] == "prior_on":
-                print(f"Setting {key} to {value}")
+                # print(f"Setting {key} to {value}")
                 setattr(target, parts[-1], value)
             else:
                 raise ValueError(f"Invalid value type for {key}: {type(value)}")
