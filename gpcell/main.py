@@ -583,14 +583,25 @@ class OscillatorDetector:
             posterior_samples = self.beta_samples[i]
 
             # compute prior and posterior mass
-            prior_mass = float(prior_dist.cdf(0.1) - prior_dist.cdf(0.0))  # type: ignore
-            posterior_mass = float(mean(posterior_samples < 0.1))
+            eps = 0.2
+            prior_mass = float(prior_dist.cdf(eps) - prior_dist.cdf(0.0))  # type: ignore
+            posterior_mass = float(mean(posterior_samples < eps))
             print(
                 f"Cell {i + 1} prior mass: {prior_mass}, posterior mass: {posterior_mass}"
             )
-
             # compute Bayes factor
             bf = posterior_mass / prior_mass
+
+            # # compute prior and posterior density
+            # prior_density = float(prior_dist.prob(0.0))
+            # kde = gaussian_kde(posterior_samples)
+            # posterior_density = float(kde.evaluate(0.0))
+            # print(
+            #     f"Cell {i + 1} prior density: {prior_density}, posterior density: {posterior_density}"
+            # )
+            # # compute Bayes factor
+            # bf = posterior_density / prior_density
+
             self.bf_list.append(bf)
 
         # print Bayes factors

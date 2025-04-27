@@ -118,11 +118,11 @@ class GaussianProcess:
         self,
         model: GPMC,
         sampler: str = "nuts",
-        num_samples: int = 1000,
-        num_burnin_steps: int = 500,
+        num_samples: int = 2000,
+        num_burnin_steps: int = 3000,
         step_size: float = 0.01,
-        num_leapfrog_steps: int = 10,
-        target_accept: float = 0.75,
+        num_leapfrog_steps: int = 5,
+        target_accept: float = 0.9,
     ):
         # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
         sampler_helper = SamplingHelper(
@@ -141,7 +141,7 @@ class GaussianProcess:
                     inner_kernel=integrator,
                     num_adaptation_steps=int(0.8 * num_burnin_steps),
                     target_accept_prob=f64(target_accept),
-                    adaptation_rate=0.05,
+                    adaptation_rate=0.01,
                 )
 
                 # set up the chain
@@ -161,6 +161,7 @@ class GaussianProcess:
                 integrator = mcmc.NoUTurnSampler(
                     target_log_prob_fn=sampler_helper.target_log_prob_fn,
                     step_size=f64(step_size),
+                    max_tree_depth=5,
                 )
                 kernel = mcmc.DualAveragingStepSizeAdaptation(
                     inner_kernel=integrator,
@@ -285,12 +286,12 @@ class GaussianProcess:
         # plot posterior marginal
         plt.hist(
             self.parameter_samples[self.name_to_index[hyperparameter]],
-            bins=20,
+            bins=30,
         )
 
         # plot constrained posterior marginal
         if constrained:
             plt.hist(
                 self.samples[self.name_to_index[hyperparameter]],
-                bins=20,
+                bins=30,
             )
