@@ -4,7 +4,7 @@
 
 A key plot in @phillips_identifying_2017 is the ROC curve comparing the GP method to the Lomb-Scargle method. It is reproduced below, with added AUC values for both methods.
 
-![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png)
+![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png){width="65%"}
 
 This shows that GPCell fits the same quality models as the MATLAB implementation, on MATLAB generated data. The ROC curves don't have margins on the original plot, adding them makes spotting discrepancies between the models easier.
 
@@ -12,9 +12,46 @@ The added AUC values give a lot of information; despite the $\sigma^2 = 0.5$ ROC
 
 ## Performance Improvements
 
-Figures and tables showing speed improvements (e.g., parallelisation with Joblib, simulation with numba)
+There were two key areas of performance improvement, in fitting models and in simulating data. Some of the improvement was just from switching to MATLAB, but the majority, especially on large datasets, comes from deliberate computational improvements.
 
-Discussion on computational resources needed (RAM, CPU/GPU)
+### Model Fitting
+
+Using `Joblib`, GPCell is able to fit distribute the job of fitting a set of replicate models to a trace as processes ran on separate cores.\
+Shown below are the results of fitting both OU and OUosc models to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
+
+```{r, echo=FALSE, message=FALSE}
+#| fig-cap: Time taken to fit processes, split by data source and backend
+
+library(tidyverse)
+
+# create dataframe of results
+source <- c("homogenous", "homogenous", "homogenous", "homogenous", "nonhomog", "nonhomog", "nonhomog")
+cells_fit <- c(1000, 1000, 100, 100, 12, 12, 12)
+method <- c("base", "joblib", "base", "joblib", "MATLAB", "base", "joblib")
+time <- c(3000, 408, 301.39, 51.21, 44.41, 36.09, 12.0)
+
+results <- data.frame(source, cells_fit, method, time)
+results$source <- factor(results$source, levels = c("homogenous", "nonhomog"))
+results$method <- factor(results$method, levels = c("base", "joblib", "MATLAB"))
+results$time <- as.numeric(results$time)
+
+# plot results
+ggplot(results, aes(x = cells_fit, y = time, color = method)) +
+  geom_point(aes(shape = source)) +
+  geom_line() +
+  scale_y_log10() +
+  scale_x_log10() +
+  labs(
+    x = "Number of cells (log)",
+    y = "Time taken to fit models (log s)",
+    color = "Method"
+  ) +
+  theme_minimal()
+```
+
+This shows the stark difference between fitting models in parallel and in sequence as the number of models increases.
+
+\newpage
 
 ## MCMC Model
 
