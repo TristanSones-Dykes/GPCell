@@ -117,41 +117,73 @@ class GaussianProcess:
     def _run_mcmc(
         self,
         model: GPMC,
+        sampler: str = "nuts",
         num_samples: int = 1000,
         num_burnin_steps: int = 500,
-        sampler: str = "hmc",
+        step_size: float = 0.01,
+        num_leapfrog_steps: int = 10,
+        target_accept: float = 0.75,
     ):
         # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
-        hmc_helper = SamplingHelper(
+        sampler_helper = SamplingHelper(
             model.log_posterior_density, model.trainable_parameters
         )
 
         # define model
-        hmc = mcmc.HamiltonianMonteCarlo(
-            target_log_prob_fn=hmc_helper.target_log_prob_fn,
-            num_leapfrog_steps=10,
-            step_size=0.01,
-        )
-        adaptive_hmc = mcmc.SimpleStepSizeAdaptation(
-            hmc,
-            num_adaptation_steps=10,
-            target_accept_prob=f64(0.75),
-            adaptation_rate=0.1,
-        )
+        match sampler.lower():
+            case "hmc":
+                integrator = mcmc.HamiltonianMonteCarlo(
+                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
+                    step_size=f64(step_size),
+                    num_leapfrog_steps=num_leapfrog_steps,
+                )
+                kernel = mcmc.SimpleStepSizeAdaptation(
+                    inner_kernel=integrator,
+                    num_adaptation_steps=int(0.8 * num_burnin_steps),
+                    target_accept_prob=f64(target_accept),
+                    adaptation_rate=0.05,
+                )
 
-        @tf.function(reduce_retracing=True)
-        def run_chain_fn():
-            return mcmc.sample_chain(
-                num_results=num_samples,
-                num_burnin_steps=num_burnin_steps,
-                current_state=hmc_helper.current_state,
-                kernel=adaptive_hmc,
-                trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
-            )
+                # set up the chain
+                @tf.function(reduce_retracing=True)
+                def run_chain_fn():
+                    return mcmc.sample_chain(
+                        num_results=num_samples,
+                        num_burnin_steps=num_burnin_steps,
+                        current_state=sampler_helper.current_state,
+                        kernel=kernel,
+                        trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
+                    )
 
-        # run chain and extract samples
-        samples, _ = run_chain_fn()  # type: ignore
-        parameter_samples = hmc_helper.convert_to_constrained_values(samples)
+                # run chain and extract samples
+                samples, _ = run_chain_fn()  # type: ignore
+            case "nuts":
+                integrator = mcmc.NoUTurnSampler(
+                    target_log_prob_fn=sampler_helper.target_log_prob_fn,
+                    step_size=f64(step_size),
+                )
+                kernel = mcmc.DualAveragingStepSizeAdaptation(
+                    inner_kernel=integrator,
+                    num_adaptation_steps=int(0.8 * num_burnin_steps),
+                    target_accept_prob=f64(target_accept),
+                )
+
+                # set up the chain
+                @tf.function(reduce_retracing=True)
+                def run_chain_fn():
+                    return mcmc.sample_chain(
+                        num_results=num_samples,
+                        num_burnin_steps=num_burnin_steps,
+                        current_state=sampler_helper.current_state,
+                        kernel=kernel,
+                        trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
+                    )
+
+                samples, _ = run_chain_fn()  # type: ignore
+            case _:
+                raise ValueError(f"Invalid sampler: {sampler}")
+
+        parameter_samples = sampler_helper.convert_to_constrained_values(samples)
 
         # map parameter names to indices
         param_to_name = {param: name for name, param in parameter_dict(model).items()}

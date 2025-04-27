@@ -29,7 +29,7 @@ from numpy.random import uniform, multivariate_normal
 from scipy.signal import find_peaks
 from scipy.interpolate import CubicSpline
 from scipy.stats import gaussian_kde
-from arviz import rhat, ess
+from arviz import rhat, ess, convert_to_dataset, plot_trace
 
 from gpflow.kernels import White, Matern12, Cosine, Kernel
 # from gpflow.utilities import print_summary
@@ -519,18 +519,83 @@ class OscillatorDetector:
             print("\nFitting MCMC...")
 
         ouosc_kernel = [Matern12, Cosine]
-        K = 2
 
+        # fit OU+Oscillator models
         self.ouosc_GPs = fit_processes_joblib(
             self.X,
             self.Y_detrended,
             ouosc_kernel,
             ouosc_priors,
-            replicates=K,
+            replicates=3,
             trainable=ouosc_trainables,
             mcmc=True,
             verbose=self.verbose,
         )
+
+        # pool and check convergence
+        self.beta_samples = []
+        for i, gp_list in enumerate(self.ouosc_GPs):
+            # extract list of sample objects for cell
+            sample_list = [gp.samples for gp in gp_list]
+
+            # get beta samples
+            beta_idx_list = [
+                gp.name_to_index[".kernel.kernels[1].lengthscales"] for gp in gp_list
+            ]
+            sample_list = array(
+                [gp.samples[beta_idx] for gp, beta_idx in zip(gp_list, beta_idx_list)]
+            )
+
+            # calculate r_hat and ess for unconstrained space
+            r_hat, ess_val = rhat(sample_list), ess(sample_list)
+            print(f"Unconstrained {i + 1} r_hat: {r_hat}, ess: {ess_val}")
+            self.beta_samples.append(concatenate(sample_list, axis=0))
+
+            # # calculate r_hat and ess for constrained space
+            # sample_list = array(
+            #     gp.parameter_samples[beta_idx]
+            #     for gp, beta_idx in zip(gp_list, beta_idx_list)
+            # )
+            # r_hat, ess_val = rhat(sample_list), ess(sample_list)
+            # print(f"Constrained {i + 1} r_hat: {r_hat}, ess: {ess_val}")
+
+            # check convergence
+            # if r_hat < 1.1 and ess_val > 200:
+            #     self.pooled_samples.append(
+            #         concatenate(sample_list, axis=0).reshape(-1, K)
+            #     )
+            # else:
+            #     print(
+            #         f"Cell {i + 1} has not converged (r_hat: {r_hat}, ess: {ess_val})"
+            #     )
+            #     self.pooled_samples.append(zeros((K, 1)))
+
+        print(f"Shape of beta samples: {self.beta_samples[0].shape}")
+
+        # calculate savage-dickey
+        self.bf_list = []
+        for i, gp_list in enumerate(self.ouosc_GPs):
+            # prior distribution
+            prior_dict = gp_list[0].constructor.prior_gen()
+            prior_dist = prior_dict["kernel.kernels[1].lengthscales.prior"]
+
+            # posterior samples
+            posterior_samples = self.beta_samples[i]
+
+            # compute prior and posterior mass
+            prior_mass = float(prior_dist.cdf(0.1) - prior_dist.cdf(0.0))  # type: ignore
+            posterior_mass = float(mean(posterior_samples < 0.1))
+            print(
+                f"Cell {i + 1} prior mass: {prior_mass}, posterior mass: {posterior_mass}"
+            )
+
+            # compute Bayes factor
+            bf = posterior_mass / prior_mass
+            self.bf_list.append(bf)
+
+        # print Bayes factors
+        for i, bf in enumerate(self.bf_list):
+            print(f"Cell {i + 1} Bayes factor: {bf}")
 
         # fit OU and OU+Oscillator models
         # self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
