@@ -20,7 +20,7 @@ Using `Joblib`, GPCell is able to fit distribute the job of fitting a set of rep
 Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
 
 ```{r, echo=FALSE, message=FALSE}
-#| fig-cap: Time taken to fit processes, split by data source and backend
+#| fig-cap: Time taken to fit processes, split by data source and backend. Base Python at 1000 cells reached 90 minutes before being stopped.
 
 library(tidyverse)
 
@@ -28,7 +28,7 @@ library(tidyverse)
 source <- c("homogenous", "homogenous", "homogenous", "homogenous", "nonhomog", "nonhomog", "nonhomog")
 cells_fit <- c(1000, 1000, 100, 100, 12, 12, 12)
 method <- c("base", "joblib", "base", "joblib", "MATLAB", "base", "joblib")
-time <- c(3000, 408, 301.39, 51.21, 44.41, 36.09, 12.0)
+time <- c(5400, 408, 301.39, 51.21, 44.41, 36.09, 12.0)
 
 results <- data.frame(source, cells_fit, method, time)
 results$source <- factor(results$source, levels = c("homogenous", "nonhomog"))
@@ -42,10 +42,12 @@ ggplot(results, aes(x = cells_fit, y = time, color = method)) +
   scale_y_log10() +
   scale_x_log10() +
   labs(
-    x = "Number of cells (log)",
-    y = "Time taken to fit models (log s)",
+    x = "Number of cells",
+    y = "Time (s)",
     color = "Method"
   ) +
+  geom_hline(yintercept = 5400, linetype = "dashed", color = "red") +
+  annotate("text", x = 15, y = 3000, label = "5400", color = "red", vjust = -1) +
   theme_minimal()
 ```
 

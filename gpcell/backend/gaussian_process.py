@@ -9,7 +9,7 @@ import tensorflow as tf
 from gpflow.optimizers import Scipy, SamplingHelper
 from gpflow.models import GPR, GPMC
 from gpflow.posteriors import PrecomputeCacheType
-from gpflow.utilities import to_default_float as f64, parameter_dict
+from gpflow.utilities import to_default_float as f64, parameter_dict, print_summary
 
 from tensorflow_probability import mcmc
 from tensorflow import Tensor
@@ -106,19 +106,13 @@ class GaussianProcess:
                 # Keep the posterior for predictions
                 self.fit_gp = gp_reg.posterior()
             case GPMC():
-                (
-                    self.samples,
-                    self.parameter_samples,
-                    self.param_to_name,
-                    self.name_to_index,
-                    self.trainable_parameters,
-                ) = self._run_mcmc(gp_reg)
+                self._run_mcmc(gp_reg)
 
     def _run_mcmc(
         self,
         model: GPMC,
-        sampler: str = "nuts",
-        num_samples: int = 2000,
+        sampler: str = "hmc",
+        num_samples: int = 3000,
         num_burnin_steps: int = 3000,
         step_size: float = 0.01,
         num_leapfrog_steps: int = 5,
@@ -152,11 +146,14 @@ class GaussianProcess:
                         num_burnin_steps=num_burnin_steps,
                         current_state=sampler_helper.current_state,
                         kernel=kernel,
-                        trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
+                        trace_fn=lambda _, pkr: (
+                            pkr.inner_results.is_accepted,
+                            pkr.inner_results.accepted_results.target_log_prob,
+                        ),
                     )
 
                 # run chain and extract samples
-                samples, _ = run_chain_fn()  # type: ignore
+                self.samples, (_, self.log_prob_chain) = run_chain_fn()  # type: ignore
             case "nuts":
                 integrator = mcmc.NoUTurnSampler(
                     target_log_prob_fn=sampler_helper.target_log_prob_fn,
@@ -177,29 +174,30 @@ class GaussianProcess:
                         num_burnin_steps=num_burnin_steps,
                         current_state=sampler_helper.current_state,
                         kernel=kernel,
-                        trace_fn=lambda _, pkr: pkr.inner_results.is_accepted,
+                        trace_fn=lambda _, pkr: (
+                            pkr.inner_results.is_accepted,
+                            pkr.inner_results.accepted_results.target_log_prob,
+                        ),
                     )
 
-                samples, _ = run_chain_fn()  # type: ignore
+                self.samples, (_, self.log_prob_chain) = run_chain_fn()  # type: ignore
             case _:
                 raise ValueError(f"Invalid sampler: {sampler}")
 
-        parameter_samples = sampler_helper.convert_to_constrained_values(samples)
+        # take post-constrained samples
+        self.parameter_samples = sampler_helper.convert_to_constrained_values(
+            self.samples
+        )
 
         # map parameter names to indices
-        param_to_name = {param: name for name, param in parameter_dict(model).items()}
-        name_to_index = {
-            param_to_name[param]: i
+        self.param_to_name = {
+            param: name for name, param in parameter_dict(model).items()
+        }
+        self.name_to_index = {
+            self.param_to_name[param]: i
             for i, param in enumerate(model.trainable_parameters)
         }
-
-        return (
-            samples,
-            parameter_samples,
-            param_to_name,
-            name_to_index,
-            model.trainable_parameters,
-        )
+        self.trainable_parameters = model.trainable_parameters
 
     def log_posterior(
         self,
@@ -256,7 +254,7 @@ class GaussianProcess:
                 except Exception as e:
                     print("Problem with new data to plot: ", e)
 
-    def plot_samples(self, hyperparameters: List[str]):
+    def plot_samples(self, hyperparameters: List[str] | str):
         """
         Plot the samples from the MCMC chain
 
@@ -266,13 +264,26 @@ class GaussianProcess:
                 List of hyperparameters to plot
         """
         # plot samples
-        for param_name in hyperparameters:
-            plt.plot(
-                self.parameter_samples[self.name_to_index[param_name]], label=param_name
-            )
-        plt.legend()
-        plt.xlabel("HMC iteration")
-        plt.ylabel("hyperparameter value")
+        match hyperparameters:
+            case str():
+                plt.plot(
+                    self.parameter_samples[self.name_to_index[hyperparameters]],
+                )
+                plt.xlabel("Sampler iteration")
+                plt.ylabel(f"{hyperparameters} value")
+            case list():
+                for param_name in hyperparameters:
+                    plt.plot(
+                        self.parameter_samples[self.name_to_index[param_name]],
+                        label=param_name,
+                    )
+                plt.legend()
+                plt.xlabel("Sampler iteration")
+                plt.ylabel("hyperparameter value")
+            case _:
+                raise ValueError(
+                    "hyperparameters must be a string or a list of strings"
+                )
 
     def plot_posterior_marginal(self, hyperparameter: str, constrained: bool = False):
         """

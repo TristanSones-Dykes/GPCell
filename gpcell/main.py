@@ -608,18 +608,6 @@ class OscillatorDetector:
         for i, bf in enumerate(self.bf_list):
             print(f"Cell {i + 1} Bayes factor: {bf}")
 
-        # fit OU and OU+Oscillator models
-        # self.ou_GPs, self.ouosc_GPs = self._fit_ou_ouosc(
-        #     self.X,
-        #     self.Y_detrended,
-        #     ou_priors,
-        #     ou_trainables,
-        #     ouosc_priors,
-        #     ouosc_trainables,
-        #     2,
-        #     mcmc=True,
-        # )
-
         # plot
         if "MCMC" in self.plots:
             self.generate_plot("MCMC")
@@ -933,22 +921,29 @@ class OscillatorDetector:
         elif target == "MCMC":
             # deal with sometimes not fitting OU GPs
             row, col = min(self.N, 12), 2
+            not_ou = False
             if not hasattr(self, "ou_GPs"):
-                col = 1
                 ou_GPs = [0 for _ in range(row)]
+                not_ou, row = True, row // 2
             else:
                 ou_GPs = self.ou_GPs  # type: ignore
 
+            print(
+                f"Number of cells: {self.N}, Number of rows: {row}, Number of cols: {col}"
+            )
+
             fig = plt.figure(figsize=(2.5 * plot_size * col, plot_size * row))
+            param = ouosc_hyperparameters[-1]
 
             for i, (x, y, ou, ouosc) in enumerate(
                 zip(self.X, self.Y_detrended, ou_GPs, self.ouosc_GPs)
             ):
-                # if only fit OU+Oscillator, don't plot OU
-                if col == 1:
+                # if only fit OU+Oscillator, plot in both columns
+                if not_ou:
                     plt.subplot(row, col, i + 1)
-                    ouosc[0].plot_samples(ouosc_hyperparameters)
-                    plt.title(f"OU+Oscillator cell {i + 1}")
+                    plt.title(f"Cell {i + 1}")
+                    for gp in ouosc:
+                        gp.plot_samples(param)
                     continue
 
                 plt.subplot(row, col, 2 * i + 1)
