@@ -17,7 +17,7 @@ There were two key areas of performance improvement, in fitting models and in si
 ### Model Fitting
 
 Using `Joblib`, GPCell is able to fit distribute the job of fitting a set of replicate models to a trace as processes ran on separate cores.\
-Shown below are the results of fitting both OU and OUosc models to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
+Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
 
 ```{r, echo=FALSE, message=FALSE}
 #| fig-cap: Time taken to fit processes, split by data source and backend
@@ -49,9 +49,34 @@ ggplot(results, aes(x = cells_fit, y = time, color = method)) +
   theme_minimal()
 ```
 
-This shows the stark difference between fitting models in parallel and in sequence as the number of models increases.
+This shows the stark difference between fitting models in parallel and in sequence as the number of cells increases. The larger numbers of cells are fitted as homogeneous alone because it is more stable due to memory usage.
 
-\newpage
+### Data Generation
+
+In the original MATLAB implementation, parallel processing is only available with external tooling, and does not take full advantage of vector processing.\
+Below is a table comparing the time taken to simulate cells (needed for model evaluation and tuning) at the different levels of optimisation.
+
+```{r, echo=FALSE}
+impl_names <- c(
+  "Python, parallel and njit",
+  "Python, parallel",
+  "Python",
+  "MATLAB"
+)
+
+times <- c(
+  "58.64",
+  "315.23",
+  "3722.16",
+  "Approx 1.5 hours"
+)
+
+knitr::kable(data.frame(Implementation = impl_names, `Time (s)` = times), caption = "Average data simulation times")
+```
+
+Each optimisation decreases the time taken by an order of magnitude, the final optimisation only being possible to due compiling the simulation function (which requires it only be written in NumPy with limited base Python).
+
+These optimisations help in two ways; first by increasing the number of experiments that can be ran and reducing the impact on servers, but also by lowering the computational barrier to use and contribute to the library effectively.
 
 ## MCMC Model
 
