@@ -1,20 +1,68 @@
 # Discussion
 
-Concise overview of the library’s features and benefits (performance, reproducibility, modularity)
+*In this section, the results of the GPCell framework are interpreted in the context of existing literature. We compare our approach with prior methods, discuss the challenges encountered and limitations of the current work, and outline future directions for research and development.*
 
 ## Comparison with Existing Methods
-Strengths and improvements over previous MATLAB-based methods (performance, extensibility, user accessibility)
 
-Benchmarking results explicitly compared
+**Reproducing Prior Findings:** A primary outcome of this project is that GPCell successfully reproduces the results of @phillips_identifying_2017, who introduced Gaussian process models for single-cell oscillation detection. In our implementation, the ROC curves comparing the GP-based classifier to the Lomb–Scargle periodogram mirror those in the original study.\
+This confirms that our Python/GPflow-based framework is **as accurate as the original library** in distinguishing truly oscillatory gene expression profiles from noisy or aperiodic signals. The Lomb–Scargle method, as reported before, performs significantly worse on these short, noisy single-cell traces, reinforcing the advantage of GP-based probabilistic modeling for this domain. By replicating these prior results, we establish a baseline of trust: any enhancements introduced by GPCell (e.g. performance gains, user-friendly API) do not come at the cost of model accuracy or correctness.
+
+This the core behind the test-driven development style of GPCell. There is a solid unit-testing pipeline for developers to use, so that they can "feel their way" back to a working implementation, which is often difficult when working with complex models.
+
+**Bayesian vs. Bootstrap Approach:** A key methodological difference is that our framework includes a fully Bayesian approach to classification, whereas Phillips et al. (2017) relied on a parametric bootstrap to set a decision threshold.\
+In the earlier method, the null (non-oscillatory) distribution of a metric was estimated by fitting many simulated datasets, effectively treating the GP model in a frequentist manner. GPCell, in contrast, uses MCMC to sample the posterior distribution of model parameters under both the oscillatory and non-oscillatory models and directly computes the Bayes factor for model comparison.
+
+This fully Bayesian treatment provides a more principled measure of evidence: instead of bootstrapped p-values, we obtain a Bayes factor that quantitatively compares how well each model (oscillatory vs. non-oscillatory) explains the data. An immediate benefit is improved uncertainty quantification – we can attach credible intervals to model parameters and even to the Bayes factor via its sampling distribution, something not possible with a single point estimate from the bootstrap.\
+Despite the model performance results of the fully Bayesian approach not being amazing, there is still interesting information in the results. How the posterior chains and bayes factors responded to different priors and optimisation methods is an interesting way of investigating a dataset and can also tell us a lot about the dynamics of a Gaussian process, especially one with a composite kernel like this.
+
+**Performance and Ecosystem:** In choosing Python with GPflow/TensorFlow Probability as the base, GPCell also departs from @phillips_identifying_2017 MATLAB library.\
+This choice was motivated by considerations of open-source availability and modern machine-learning infrastructure. Python’s GP libraries (like GPflow and GPyTorch) leverage accelerated hardware and are more actively developed than the older MATLAB GPML toolbox.
+
+The benefit is evident in performance (discussed in Section 3.2): for instance, using Python allowed easy integration of **parallel computing** and just-in-time compilation (Numba), yielding orders-of-magnitude speedups in simulation and fitting tasks that would be cumbersome in MATLAB. Our results show that on large simulated datasets (e.g. 1000 single-cell traces), GPCell can fit the necessary GP models in minutes, whereas a naïve single-core Python (or MATLAB) implementation would take hours.
+
+It should be noted that some of this improvement comes from inherent advantages of Python’s ecosystem (efficient libraries, better memory management) and some from our deliberate optimizations (parallel processing, memmapped data access, etc.).\
+By demonstrating these speedups, we show that advanced Bayesian methods can be made tractable for bioinformatics datasets – addressing a common criticism that full Bayesian GP methods are too slow for practical use.
+
+**Reproducibility and Open Science:** Another comparison to emphasize is in **reproducibility**. Python’s open nature means others can readily install and run our code without license barriers, and our integration of CI/CD ensures that the codebase is tested and documented. This is a significant practical improvement over the existing method: researchers can build upon GPCell to explore new datasets or methodological tweaks, rather than re-implementing from scratch. @ince2012 have noted that proprietary tools hamper reproducible research; GPCell directly addresses that by moving to a free platform and providing an automated pipeline for testing and documentation. Thus, in terms of **practical usage and community impact**, GPCell compares favorably to the existing MATLAB-based approach.
+
+In summary, GPCell stands well when compared to existing methods. It retains the accuracy of the approach by @phillips_identifying_2017, advances it by adopting a full Bayesian paradigm, and dramatically improves the runtime and usability through modern computational techniques.\
+It aligns with and adds to the current trend in the community toward probabilistic, reproducible analysis of single-cell time series. This combination of correctness, efficiency, and openness is a distinguishing strength of our framework relative to previous efforts.
 
 ## Challenges and Limitations
-Issues encountered (e.g., parameter tuning, hyperparameter priors, scalability to large datasets)
 
-Addressing previous inconsistent choices (priors selection and impact)
+While GPCell demonstrates strong performance and flexibility, we encountered several **challenges and limitations** during development and experimentation that temper these successes:
+
+**Computational Demands of MCMC:** Embracing a fully Bayesian approach with MCMC sampling introduces significant computational overhead. Sampling the posterior for each single-cell GP model is far more time-consuming than finding a single maximum likelihood estimate.
+
+We partially mitigated this by starting MCMC chains at the ML estimates (to speed up burn-in) and by running chains in parallel across CPU cores. Nonetheless, the **MCMC support is computationally intensive**, especially as the number of cells or complexity of models grows. Our timing tests indicate that even with optimizations, performing MCMC for hundreds of cells can be lengthy. \
+We had to monitor convergence diagnostics (Gelman-Rubin $\hat R$ values and effective sample sizes) for each model. In some cases, achieving convergence required longer chains or adjustments to the sampling parameters (e.g., step size in HMC or switching to NUTS), indicating that **Bayesian inference for GP hyperparameters is not plug-and-play**.
+
+Users of GPCell must be aware of these settings; improper tuning could lead to non-converged chains and unreliable Bayes factors. In contrast, the BIC method (ML optimizing hyperparameters without bootstrapping) was faster per model and simpler to execute. Thus, there is a trade-off: our fully Bayesian method yields richer information but at a higher computational cost and complexity. This is a limitation in scenarios where resources are limited or a quick analysis is needed.
+
+**Choice of Prior and Threshold:** As a Bayesian method, our classification depends on prior choices (priors on GP kernel hyperparameters) and on the threshold chosen for the Bayes factor to call “oscillatory” vs “non-oscillatory.” \
+The additional constraint of having to work with MCMC sampling means that the choice of prior and hyperparameters is crucial;
+
+**Generalizability:** Finally, although GPCell was designed to be modular and extensible, it is currently still a **specialized framework** for a particular class of problems (single-cell gene expression oscillations). Applying it to other domains may require additional development. \
+For instance, using GPCell on metabolic oscillations or population-level rhythms might require different kernels or data pre-processing that are not built-in. The codebase’s heavy reliance on GPflow/TensorFlow Probability means users must be comfortable with those tools to fully exploit customization (this could be a barrier for some biologists). In short, there is a learning curve and some scope limitation when adopting GPCell outside its primary intended use.
+
+By recognizing these challenges and limitations, we set realistic expectations for GPCell’s use. These insights also directly inform how we plan to improve the framework in the future, as discussed next.
 
 ## Future Directions
-Potential enhancements (Variational inference methods, GPU support, web-based interactive version)
 
-Broader implications for the bioinformatics community and reproducibility
+The development and evaluation of GPCell open several avenues for future work. We envision improvements and extensions in terms of methodology, performance, and application scope:
 
-Final thoughts summarising key findings, relevance, and impact of your work
+**Enhanced Kernel Models:** One immediate extension is to incorporate more flexible kernel functions to handle a broader range of oscillatory behaviors. As noted in the limitations, a **non-stationary oscillation kernel** would allow detection of oscillations whose frequency or amplitude changes over time. Recent work by @sahay2023 uses a non-stationary GP kernel to successfully identify transient oscillations​. \
+We could integrate similar kernels (for example, a time-varying frequency kernel or a mixture of kernels that capture trend plus oscillation) into GPCell. The modular design of our framework should allow adding a new kernel class relatively easily.
+
+Additionally, **multivariate GP models** could be explored. In some cases, one might analyze oscillations in multiple genes simultaneously to see if there are coordinated oscillatory patterns (e.g., in gene regulatory networks). Extending GPCell to support multi-output GPs or coupled oscillators could provide a richer biological insight – for example, detecting phase relationships between two oscillating transcripts. This would require new kernels (such as cross-covariance kernels linking two outputs) and more complex inference, but TensorFlow Probability’s capabilities could be leveraged for this expansion.
+
+**Scalability and Approximate Inference:** Although we achieved significant speedups, full MCMC over hundreds of GP models can still be a bottleneck. In the future, we could consider **approximate Bayesian inference** techniques to improve scalability. One idea is to implement **variational inference (VI)** for our classification model as an alternative to MCMC. Variational methods can drastically cut computation time by converting inference into an optimization problem at the cost of an approximation. For instance, a variational Bayes approach with inducing points (following @titsias2009) could allow us to handle longer time series or more cells by trading off some accuracy in posterior estimates. \
+We could also experiment with **efficient Bayes factor computation**. The bridge sampling method we referenced is one such approach – automating that within GPCell could give faster evidence estimates for model comparison, especially when the posterior is complex. Another route is using **parallel tempering or distributed MCMC** to better utilize multi-core and possibly GPU resources for sampling. As GPU integration was a benefit of using GPflow, a future version of GPCell might run many GP model fits and MCMC chains on GPU(s), further accelerating analysis for big datasets (e.g., single-cell experiments with thousands of cells).
+
+**User Interface and Integration:** On the software side, improving GPCell’s **user interface and integration** with other tools is a priority. Currently, using GPCell requires writing Python code and understanding the API. \
+We could develop a higher-level command-line interface or GUI for biologists less comfortable with coding – for example, a simple script where users input a CSV of time-series data and get back classification results and plots. Integration with popular single-cell analysis pipelines is another future direction.
+
+Single-cell RNA-seq and time-lapse imaging analyses often use platforms like Scanpy or custom data structures; making GPCell compatible with these (through data import/export functions or wrappers) would ease adoption.
+
+**Final Outlook:** In conclusion, GPCell’s current state already demonstrates the power of combining modern Gaussian process methods with efficient computing for biological data analysis. \
+Looking ahead, by extending the methodological range (better kernels, faster inference) and improving accessibility (user interfaces, integration), GPCell could grow into a competent tool for oscillation detection.

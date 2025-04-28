@@ -14,6 +14,7 @@ from sklearn.metrics import roc_curve, auc
 from gpcell import OscillatorDetector
 from gpcell.utils import load_sim
 from gpcell.backend import sim_ou_prior, sim_ouosc_prior
+from gpcell.backend.priors import sd_ou_priors, sd_ouosc_priors
 
 
 def plot_rocs_and_timeseries(
@@ -249,6 +250,7 @@ def plot_roc(
     labels: Optional[Sequence[str]] = None,
     axes: Optional[axes.Axes] = None,
     colour_order: List[str] = ["r", "b"],
+    note: Optional[str] = None,
 ):
     """
     Plots ROC curves for multiple models.
@@ -265,6 +267,8 @@ def plot_roc(
         Matplotlib axes to plot on, by default None.
     colour_order : List[str], optional
         List of colors for each model, by default ["r", "b"].
+    note : Optional[str], optional
+        Note to display above the plot, like figure letter.
     """
     # axes IO
     if axes is None:
@@ -302,21 +306,22 @@ def plot_roc(
     ax.set_xlabel("1 - Specificity (false positive rate)")
     ax.set_ylabel("Sensitivity (true positive rate)")
     ax.legend(loc="lower right")
+    ax.set_title("ROC Curves" if note is None else note)
     xlims = ax.get_xlim()
     ylims = ax.get_ylim()
-    ax.text(
-        xlims[0] - 0.1 * (xlims[1] - xlims[0]),
-        ylims[1] + 0.03 * (ylims[1] - ylims[0]),
-        "C",
-        fontsize=9,
-        ha="right",
-        va="bottom",
-        color="k",
-    )
+    # ax.text(
+    #     xlims[0] - 0.1 * (xlims[1] - xlims[0]),
+    #     ylims[1] + 0.03 * (ylims[1] - ylims[0]),
+    #     "C" if note is None else note,
+    #     fontsize=11,
+    #     ha="right",
+    #     va="bottom",
+    #     color="k",
+    # )
 
 
 def compute_rocs_from_file(
-    filename: str, noise: float, n_cells: int, joblib: bool = False
+    filename: str, noise: float, n_cells: int, joblib: bool = False, mcmc: bool = False
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Reads simulated data from a CSV file and computes ROC curves based on
@@ -362,13 +367,18 @@ def compute_rocs_from_file(
         "plots": ["BIC"],
         "set_noise": noise,
         "detrend": False,
-        "ou_prior_gen": sim_ou_prior,
-        "ouosc_prior_gen": sim_ouosc_prior,
+        "ou_prior_gen": sim_ou_prior if not mcmc else sd_ou_priors,
+        "ouosc_prior_gen": sim_ouosc_prior if not mcmc else sd_ouosc_priors,
     }
     od = OscillatorDetector.from_file(filename, "Time", "", "Cell", params=params)
-    od.fit("BIC")
-    BICdiffM = od.BIC_diffs  # list or array with length equal to total_columns
-    BICdiffTOT = np.array(BICdiffM)
+
+    if mcmc:
+        od.fit("MCMC")
+        BICdiffTOT = np.array(od.bf_list)
+    else:
+        od.fit("BIC")
+        BICdiffM = od.BIC_diffs  # list or array with length equal to total_columns
+        BICdiffTOT = np.array(BICdiffM)
 
     # --- ROC analysis using BIC differences --- #
 

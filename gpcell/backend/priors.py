@@ -124,8 +124,11 @@ def sd_ouosc_priors(noise: Numeric) -> GPPrior:
         # "kernel.kernels[1].lengthscales.prior": tfd.LogNormal(
         #     loc=f64(lognormal_param_list[1][0]), scale=f64(lognormal_param_list[1][1])
         # ),
-        "kernel.kernels[1].lengthscales.prior": tfd.LogNormal(
-            loc=f64(0.0), scale=f64(1.0)
+        # "kernel.kernels[1].lengthscales.prior": tfd.LogNormal(
+        #     loc=f64(0.0), scale=f64(1.0)
+        # ),
+        "kernel.kernels[1].lengthscales.prior": tfd.HalfNormal(
+            scale=f64(3.1910159349643954)
         ),
         "likelihood.variance": noise**2,
     }

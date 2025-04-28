@@ -2,9 +2,11 @@
 
 Gene expression regulation is pivotal in cellular function, with significant advancements since the 1960s. Notably, Jacob and Monod's work elucidated gene activation mechanisms in response to external stimuli via mRNA transcription modulation [@jacob_genetic_1961]. Subsequent research, such as @hardin_feedback_1990's study on circadian rhythms in *Drosophila melanogaster*, highlighted oscillatory gene expression through protein-mediated RNA inhibition. Building upon these foundations, @phillips_identifying_2017 investigated gene expression patterns in neural progenitor cells, identifying correlations between oscillatory behavior and differentiation. Their methodology employed Gaussian processes to classify gene expression time series using MATLAB.
 
-This dissertation extends their approach by developing a Python library that facilitates Gaussian process fitting and oscillation detection across diverse datasets. Enhancements include an extensible modelling framework, allowing for the easy addition of fitting techniques like MCMC; being based coherently on top of Tensorflow Probability, taking advantage of computational advancements and giving access to a suite of priors, model types, and optimisers; and an automated Continuous Integration/Continuous Deployment (CI/CD) pipeline, with accuracy tests for models and automatically generated docs [@gpcell_docs].
+This dissertation extends their approach by developing a Python library that facilitates Gaussian process fitting and oscillation detection across diverse datasets. Enhancements include an extensible modelling framework, allowing for the easy addition of fitting techniques like MCMC; being based coherently on top of Tensorflow Probability, taking advantage of computational advancements and giving access to a suite of priors, model types, and optimisers; and an automated Continuous Integration/Continuous Deployment (CI/CD) pipeline, with accuracy tests for models and automatically generated docs; online docs reference: [@gpcell_docs]. We also investigate Bayes factors, methods to calculate them, and attempt to detect oscillatory processes by using the Savage-Dickey ratio and Bridge Sampling.
 
 Future works can now prioritise scientific discovery and model choice, using a suite of utilities that simplify the model-fitting process.
+
+![The network topology of the Hes1 transcription factor (showing negative autoregulation with delay)](diagram.png){width="60%"}
 
 \newpage
 \tableofcontents

@@ -112,8 +112,8 @@ class GaussianProcess:
         self,
         model: GPMC,
         sampler: str = "hmc",
-        num_samples: int = 3000,
-        num_burnin_steps: int = 3000,
+        num_samples: int = 1000,
+        num_burnin_steps: int = 5000,
         step_size: float = 0.01,
         num_leapfrog_steps: int = 5,
         target_accept: float = 0.9,
@@ -176,11 +176,11 @@ class GaussianProcess:
                         kernel=kernel,
                         trace_fn=lambda _, pkr: (
                             pkr.inner_results.is_accepted,
-                            pkr.inner_results.accepted_results.target_log_prob,
+                            # pkr.inner_results.accepted_results.target_log_prob,
                         ),
                     )
 
-                self.samples, (_, self.log_prob_chain) = run_chain_fn()  # type: ignore
+                self.samples, _ = run_chain_fn()  # type: ignore
             case _:
                 raise ValueError(f"Invalid sampler: {sampler}")
 

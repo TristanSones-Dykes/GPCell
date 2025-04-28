@@ -526,7 +526,7 @@ class OscillatorDetector:
             self.Y_detrended,
             ouosc_kernel,
             ouosc_priors,
-            replicates=3,
+            replicates=4,
             trainable=ouosc_trainables,
             mcmc=True,
             verbose=self.verbose,

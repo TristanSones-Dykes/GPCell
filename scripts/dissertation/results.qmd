@@ -12,7 +12,7 @@ The added AUC values give a lot of information; despite the $\sigma^2 = 0.5$ ROC
 
 ## Performance Improvements
 
-There were two key areas of performance improvement, in fitting models and in simulating data. Some of the improvement was just from switching to MATLAB, but the majority, especially on large datasets, comes from deliberate computational improvements.
+There were two key areas of performance improvement, in fitting models and in simulating data. Some of the improvement was just from switching to Python, but the majority, especially on large datasets, comes from deliberate computational improvements.
 
 ### Model Fitting
 
@@ -20,15 +20,15 @@ Using `Joblib`, GPCell is able to distribute the job of fitting a set of replica
 Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (square/matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
 
 ```{r, echo=FALSE, message=FALSE}
-#| fig-cap: Time taken to fit processes, on a log scale, split by data source and backend. Base Python at 1000 cells reached 90 minutes before being stopped.
+#| fig-cap: Time taken to fit processes, split by data source and backend. Base Python at 1000 cells reached 90 minutes before being stopped.
 
 library(tidyverse)
 
 # create dataframe of results
-source <- c("homogeneous", "homogeneous", "homogeneous", "homogeneous", "homogeneous", "nonhomog", "nonhomog", "nonhomog")
-cells_fit <- c(1000, 1000, 100, 100, 100, 12, 12, 12)
-method <- c("base", "joblib", "MATLAB", "base", "joblib", "MATLAB", "base", "joblib")
-time <- c(5400, 408, 425.12, 301.39, 51.21, 44.41, 36.09, 12.0)
+source <- c("homogeneous", "homogeneous", "homogeneous", "homogeneous", "homogeneous", "homogeneous", "homogeneous", "nonhomog", "nonhomog", "nonhomog")
+cells_fit <- c(200, 200, 1000, 1000, 100, 100, 100, 12, 12, 12)
+method <- c("base", "joblib", "base", "joblib", "MATLAB", "base", "joblib", "MATLAB", "base", "joblib")
+time <- c(604.12, 189.26, 5400, 408, 425.12, 301.39, 51.21, 44.41, 36.09, 12.0)
 
 results <- data.frame(source, cells_fit, method, time)
 results$source <- factor(results$source, levels = c("homogeneous", "nonhomog"))
@@ -39,15 +39,11 @@ results$time <- as.numeric(results$time)
 ggplot(results, aes(x = cells_fit, y = time, color = method)) +
   geom_point(aes(shape = source)) +
   geom_line() +
-  scale_y_log10() +
-  scale_x_log10() +
   labs(
     x = "Number of cells",
     y = "Time (s)",
     color = "Method"
   ) +
-  geom_hline(yintercept = 5400, linetype = "dashed", color = "red") +
-  annotate("text", x = 15, y = 3000, label = "5400", color = "red", vjust = -1) +
   theme_minimal()
 ```
 
@@ -85,16 +81,65 @@ Each optimisation decreases the time taken by an order of magnitude, the final o
 
 These optimisations help in two ways; first by increasing the number of experiments that can be ran and reducing the impact on servers, but also by lowering the computational barrier to use and contribute to the library effectively.
 
-\newpage
-
 ## MCMC Support
 
-Show MCMC models being fit through GPCell and other metrics.
+It was shown earlier how MCMC support was added to the `GaussianProcess` framework, in this section we are going to show the fit quality and performance of the GP models on the Hes data and on some simulated data.
 
-Show performance gains also make it to MCMC.
+### Fit Models
+
+In this section we show the trace plots of models fit under different samplers and priors within GPCell. In the Hes data, cells 9 and 12 are the oscillatory ones.
+
+#### HMC
+
+![GPCell MCMC OUosc lengthscale chains plot (Hes data)](hes_fit_hmc_halfN.png){width="580" height="590"}
+
+This shows the $\beta$ parameter chains (post burn-in) for the 12 Hes cells analysed in @phillips_identifying_2017. Cell 12 always has that tight convergence compared to the others, however the quality of the fits is low, and the Gelman-Rubin statistic is rarely below 1.1.
+
+#### NUTS
+
+![GPCell MCMC OUosc chain plot (Hes data)](images/nuts_samples.png)
+
+These are two of the models fit by NUTS, to cells 5 and 6 from the Hes dataset (oscillatory cells).
+
+NUTS performed better on the convergence of posterior chains, often getting most if not all under 1.1 Gelman-Rubin statistic and providing chains that are easier to interpret.\
+The problem with the NUTS sampler is that it is far slower than HMC under these conditions, despite having an easier time converging.\
+However, it is still a result from GPCell to have been able to add a new sampler from TensorFlow Probability just by extending one part of `GaussianProcess`.
+
+\newpage
+
+### Savage-Dickey Ratio
+
+Whilst this is a part of the Bayesian Classifier section, it is included here because implementation and testing of the Savage-Dickey ratio was with GPflow and not with `pymc`.
+
+During testing, the Savage-Dickey ratio was erratic/random and did not give any classification information. This was largely due to the density of prior and posterior models around the null value of $\beta$ and was tested on both the Hes dataset and simulated data.
+
+Looking at the traces, the Savage-Dickey ratio becomes a ratio between the number of chains stuck at the minimum near 0, and those that have escaped the well. Across many runs, the only cell with chains that go near 1 after escaping are those of cell 4. Another problem is that the prior density is not high enough, so if there is even a small amount of evidence for it being oscillatory then the Bayes factor explodes.
+
+\newpage
 
 ## Bayesian Classifier
 
-Show pymc model fits and plots
+### Model Fits
 
-Discuss the results of Savage-Dickey vs bridge sampling
+As mentioned in Methods, we implemented the multivariate Gaussian, bridge sampling algorithm in `pymc`. This was almost completely deprecated in Python, to the effect of researchers using R exclusively for its `bridgesampling` library; @else2023.
+
+Whilst we have already shown we can fit these models in GPCell, it is worth showing it here again to put the classifier statistics in context. We also only show OUosc models in the GPCell MCMC section, as it is being used for the Savage-Dickey ratio.
+
+![PyMC MCMC OUosc chain summary plot (simulated data)](pymc_fit_1.png){width="90%"}
+
+This is a typical fit of the OUosc model using `pymc`; on the simulated data, the $\beta$ parameter (ls2) almost always converges to a value around 55 and oscillates evenly. \
+The OU models are similarly stable:
+
+![PyMC MCMC OU chain summary plot (simulated data)](pymc_fit_2.png){width="80%"}
+
+### Bridge Sampling
+
+During testing, on the simulated data, the bridge sampling method implemented in `pymc` was erratic/random and did not give any classification information.
+
+![ROC plot of bridge-sampling classifier, based on 50 simulated cells](images/bridge_ROC.png){width="70%"}
+
+This shows the bridge sampler is not able to obtain any information; testing was limited for this method due to time restrictions and the slow fitting speeds of `pymc`.
+
+Looking at the OUosc MCMC chains, the $\beta$ parameter's oddly stationary result seems to point to the model fitting to a minimum that does not encode much information about the lengthscale of the Cosine component.\
+This is off-putting; however, compared to the previous uniform priors and maximum likelihood inference, the GPs fit far more consistently and without linear algebra errors and warnings. The OUosc models are fitting to similar amplitude values as the OU traces, and are also able to predict plausible data.\
+Hopefully this means it is just a prior issue with the $\beta$ parameter, be it hyperparameter values or distribution choice.
