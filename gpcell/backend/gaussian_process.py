@@ -9,7 +9,7 @@ import tensorflow as tf
 from gpflow.optimizers import Scipy, SamplingHelper
 from gpflow.models import GPR, GPMC
 from gpflow.posteriors import PrecomputeCacheType
-from gpflow.utilities import to_default_float as f64, parameter_dict, print_summary
+from gpflow.utilities import to_default_float as f64, parameter_dict
 
 from tensorflow_probability import mcmc
 from tensorflow import Tensor
