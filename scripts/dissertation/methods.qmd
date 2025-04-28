@@ -60,7 +60,34 @@ Such that, if the OUosc model has a significantly better fit on a trace despite 
 
 ### Inference
 
-Section on MAP, MCMC etc
+#### Closed-Form Posterior and Marginal Likelihood
+
+Gaussian Process regression with a Gaussian likelihood admits an exact posterior, which is itself a GP characterized by an analytically tractable mean and covariance function; @rasmussen2005.
+
+The marginal likelihood (evidence) of the observations under the GP prior can be computed in closed form and differentiated with respect to hyperparameters, enabling Type II Maximum Likelihood (ML) estimation – empirical Bayes – where kernel parameters are set by maximizing the log marginal likelihood. \
+Gradient-based optimization (e.g., using L-BFGS or conjugate gradients) is standard practice, as the derivatives of the log marginal likelihood with respect to hyperparameters can be expressed in terms of the inverse and determinant of the kernel matrix.
+
+\newpage
+
+#### Approximate Inference
+
+When the likelihood is non-Gaussian, usually in classification or count data, exact GP inference is intractable, necessitating approximate Bayesian inference.\
+These also come into play when we need to numerically integrate the posterior distribution, in our case for calculating the Bayes Factor.
+
+There are many methods here, but we will go over two major ones in GP inference. Variational Inference and Markov Chain Monte Carlo.
+
+##### 1. Markov Chain Monte Carlo (MCMC)
+
+MCMC methods, such as Hamiltonian Monte Carlo (HMC) or No-U-Turn Sampler (NUTS), draw samples from the joint posterior over latent functions and hyperparameters, yielding a full Bayesian treatment with asymptotic exactness; @titsias2011. \
+Although more computationally intensive, MCMC does not rely on Gaussian approximations and is widely used when full uncertainty quantification is critical; @titsias2008.
+
+##### 2. Variational Inference
+
+Variational approaches posit a tractable family and optimize a variational lower bound (the evidence lower bound, ELBO) on the log marginal likelihood. Sparse variational methods introduce inducing variables to reduce computational cost, leading to scalable GP models such as the Sparse Variational Gaussian Process; @titsias2009.
+
+------------------------------------------------------------------------
+
+To summarise, while Type II ML provides efficient point estimates of hyperparameters, fully Bayesian approaches use MCMC to marginalize over hyperparameters, capturing posterior uncertainty and avoiding overfitting @titsias2008. The choice between these reflects a trade-off between computational tractability (favoring optimization) and comprehensive uncertainty quantification (favoring sampling).
 
 \newpage
 
@@ -90,6 +117,8 @@ Originally described in @dickey1971 and explained in-depth in @wagenmakers2010; 
 This is applicable to our problem, as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
 
 We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this by using a kernel density estimate
+
+#### Bridge Sampling
 
 ### **Prior choices**
 
