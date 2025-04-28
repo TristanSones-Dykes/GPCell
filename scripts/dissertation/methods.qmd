@@ -67,8 +67,6 @@ Gaussian Process regression with a Gaussian likelihood admits an exact posterior
 The marginal likelihood (evidence) of the observations under the GP prior can be computed in closed form and differentiated with respect to hyperparameters, enabling Type II Maximum Likelihood (ML) estimation – empirical Bayes – where kernel parameters are set by maximizing the log marginal likelihood.\
 Gradient-based optimization (e.g., using L-BFGS or conjugate gradients) is standard practice, as the derivatives of the log marginal likelihood with respect to hyperparameters can be expressed in terms of the inverse and determinant of the kernel matrix.
 
-\newpage
-
 #### Approximate Inference
 
 When the likelihood is non-Gaussian, usually in classification or count data, exact GP inference is intractable, necessitating approximate Bayesian inference.\
@@ -138,8 +136,6 @@ This is applicable to our problem, as the non-oscillatory kernel equals the osci
 
 We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this either by a standard average on the posterior samples, or by calculating a posterior kernel density estimate and evaluating that on our interval.
 
-\newpage
-
 #### Bridge Sampling
 
 Bridge sampling is a flexible Monte Carlo method to approximate marginal likelihoods. Originally introduced in @bennett1976 and formalized by @meng1996, bridge sampling constructs an optimal “bridge” function between two densities – typically the posterior and a convenient proposal – to minimize estimator variance; @gronau2017.\
@@ -178,9 +174,30 @@ While the runtimes of these algorithms are quite fast, there is very little in t
 
 ### **Prior choices**
 
-Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, our priors need to have a support of $[0, +\infty)$ for $\beta$ as well as being positive and well-behaved in sampling.
+Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, we cannot use the same priors.\
+This is because, in the maximum likelihood estimation method, they are just used to generate starting points for the gradient descent. Using the bayes factor has many advantages, like quantifying uncertainty and allowing for positive and negative hypothesis testing; however, the added complexity in the result makes it far more dependent on the prior distribution, which is shown in @sinharay2002 and many other studies.
 
-@phillips_identifying_2017 used tight, uniform priors for evaluation on the simulated dataset; in order to match these for evaluation against their method,
+The $\beta$ prior needs to have a support of $[0, +\infty)$, to make the models nested, and they need to be positive as bridge sampling relies on unconstrained chains. @phillips_identifying_2017 used tight, uniform priors for evaluation on the simulated dataset; in order to match these for fair evaluation against their method, we quantile-matched smooth priors onto the intervals of the original uniform ones.\
+For $\sigma$ and $\alpha$, that had uniform priors on $[0.1, 2.0]$, they have no requirement of support at $0$ (as they aren't our parameter of interest) therefore a log-normal distribution was chosen with the specification of 95% falling within the interval.
+
+If $X \sim \text{LogNormal}(\mu, \sigma^2)$, then $\ln X \sim \mathcal{N}(\mu, \sigma^2)$. The 2.5% and 97.5% quantiles of $\mathcal{N}(\mu, \sigma^2)$ are $\mu \pm 1.96\sigma$, hence set:
+
+$$
+\ln(a) = \mu - 1.96\sigma, \space \ln(b) = \mu + 1.96\sigma
+$$
+
+Which we solve to obtain:
+
+\begin{align}
+\mu &= \frac{\ln(a) + \ln(b)}{2} \\
+\sigma &= \frac{\ln(b) - \ln(a)}{2 \times 1.96}
+\end{align}
+
+The oscillatory parameter $\beta$ must include 0 in its support, so a half-normal distribution was chosen. $X \sim \text{HalfNormal}(\sigma^2)$, with the condition that 95% of its mass lies below the upper bound of its original underlying prior.
+
+$$
+P(X \le b) = \text{erf}(\frac{b}{\sigma \sqrt{2}}) = 0.95 \implies \sigma = \frac{b}{\sqrt{2} \text{erf}^{-1}(0.95)}
+$$
 
 \newpage
 
@@ -227,8 +244,6 @@ Using memmaps also improves the stability of the parallel processes which is vit
 **Just-In-Time Compilation:** For the computationally intensive Gillespie simulations, GPCell utilises `Numba`, a Just-In-Time compiler for Python. This enables the conversion of Python code (exclusively written in base Python and `Numpy`) into optimised machine code at runtime.
 
 This is a perfect use-case for JIT compilation, as the simulation functions themselves are not very complicated computationally, they just need to be ran sequentially for a lot of iterations.
-
-\newpage
 
 ### Extensibility and Modularity
 
