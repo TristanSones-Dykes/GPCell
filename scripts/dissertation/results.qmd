@@ -17,21 +17,21 @@ There were two key areas of performance improvement, in fitting models and in si
 ### Model Fitting
 
 Using `Joblib`, GPCell is able to distribute the job of fitting a set of replicate models to a trace, as processes ran on separate cores.\
-Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
+Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (square/matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
 
 ```{r, echo=FALSE, message=FALSE}
-#| fig-cap: Time taken to fit processes, split by data source and backend. Base Python at 1000 cells reached 90 minutes before being stopped.
+#| fig-cap: Time taken to fit processes, on a log scale, split by data source and backend. Base Python at 1000 cells reached 90 minutes before being stopped.
 
 library(tidyverse)
 
 # create dataframe of results
-source <- c("homogenous", "homogenous", "homogenous", "homogenous", "nonhomog", "nonhomog", "nonhomog")
-cells_fit <- c(1000, 1000, 100, 100, 12, 12, 12)
-method <- c("base", "joblib", "base", "joblib", "MATLAB", "base", "joblib")
-time <- c(5400, 408, 301.39, 51.21, 44.41, 36.09, 12.0)
+source <- c("homogeneous", "homogeneous", "homogeneous", "homogeneous", "homogeneous", "nonhomog", "nonhomog", "nonhomog")
+cells_fit <- c(1000, 1000, 100, 100, 100, 12, 12, 12)
+method <- c("base", "joblib", "MATLAB", "base", "joblib", "MATLAB", "base", "joblib")
+time <- c(5400, 408, 425.12, 301.39, 51.21, 44.41, 36.09, 12.0)
 
 results <- data.frame(source, cells_fit, method, time)
-results$source <- factor(results$source, levels = c("homogenous", "nonhomog"))
+results$source <- factor(results$source, levels = c("homogeneous", "nonhomog"))
 results$method <- factor(results$method, levels = c("base", "joblib", "MATLAB"))
 results$time <- as.numeric(results$time)
 
@@ -51,7 +51,12 @@ ggplot(results, aes(x = cells_fit, y = time, color = method)) +
   theme_minimal()
 ```
 
-This shows the stark difference between fitting models in parallel and in sequence as the number of cells increases. The larger numbers of cells are fitted as homogeneous alone because it is more stable due to memory usage.
+This shows the stark difference between fitting models in parallel and in sequence as the number of cells increases.
+
+The datasets for the tests on the larger numbers of cells are all homogeneous. This is because the parallel fitting is more stable when the dataset is able to be made into an optimised `memmap`.\
+Note that although it seems like a difficult limit to require the input traces to be homogeneous for the best performance, the performance and stability of the algorithm without it is still a large improvement.
+
+Additionally, during @phillips_identifying_2017's bootstrap step, the synthetic cell generations are homogeneous by definition; this reduces the time to complete such a compute-intensive task massively. If you are only classifying 12 single-cell traces like in their Hes example dataset, that turns into fitting $12 \times 10 \text{ (simulations) } \times 10 \text{ (replicates) = 1200}$ models, this is easily programmed and processed in parallel with GPCell.
 
 ### Data Generation
 
@@ -80,10 +85,16 @@ Each optimisation decreases the time taken by an order of magnitude, the final o
 
 These optimisations help in two ways; first by increasing the number of experiments that can be ran and reducing the impact on servers, but also by lowering the computational barrier to use and contribute to the library effectively.
 
-## MCMC Model
+\newpage
 
-Example MCMC fits (trace plots, parameter distributions).
+## MCMC Support
 
-Show how it works on the data, performance of classification.
+Show MCMC models being fit through GPCell and other metrics.
 
-Discuss implications and accuracy improvements from MCMC inference.
+Show performance gains also make it to MCMC.
+
+## Bayesian Classifier
+
+Show pymc model fits and plots
+
+Discuss the results of Savage-Dickey vs bridge sampling

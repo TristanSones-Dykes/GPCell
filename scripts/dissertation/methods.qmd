@@ -191,11 +191,18 @@ Which we solve to obtain:
 $$
 \mu = \frac{\ln(a) + \ln(b)}{2} \text{  and  } \sigma = \frac{\ln(b) - \ln(a)}{2 \times 1.96}
 $$\
-The oscillatory parameter $\beta$ must include 0 in its support, so a half-normal distribution was chosen. $X \sim \text{HalfNormal}(\sigma^2)$, with the condition that 95% of its mass lies below the upper bound of its original underlying prior:
+The oscillatory parameter $\beta$, originally uniform on $[0.1, 4.0]$, must include 0 in its support, so a half-normal distribution was chosen. $X \sim \text{HalfNormal}(\sigma^2)$.\
+It only has one parameter to tune, so with the condition that 97.5% of its mass lies above the lower bound of its original underlying prior:
 
 $$
 P(X \le b) = \text{erf}(\frac{b}{\sigma \sqrt{2}}) = 0.95 \implies \sigma = \frac{b}{\sqrt{2} \text{erf}^{-1}(0.95)}
 $$
+
+This may seem like quite an extreme condition; however, once at very small values, the sampler struggles to escape the local maximum of fitting to the null model. This was the reasoning behind @phillips_identifying_2017 choosing those lower bounds in their original method.
+
+But, a low prior density near $\beta = 0$ means the Savage-Dickey ratio, which relies on the kernel density estimate at the null value, is expected to struggle without a large number of samples.\
+This presents a trade-off between trace convergence and accuracy that may mean bridge sampling is the better choice, especially the direct ratio estimation.\
+@wang puts forward Warp Bridge sampling, specifically Warp-U transformations. These allow the target and proposal distributions $p_1$ and $p_2$ to be much more opposed, with Warp-U transformations able to map a multi-modal density to a uni-modal one.
 
 ```{python}
 #| echo: false
@@ -215,6 +222,9 @@ x = np.linspace(0, b * 1.2, 1000)
 lognorm_pdf = (1 / (x * sigma * np.sqrt(2 * np.pi))) * np.exp(-((np.log(x) - mu) ** 2) / (2 * sigma ** 2))
 uniform_pdf = np.where((x >= a) & (x <= b), 1 / (b - a), 0)
 
+# plot vars
+y_lim = (0, 1.6)
+
 # Define 2 column, rectangular figure
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
 ax1.plot(x, lognorm_pdf, label='LogNormal')
@@ -222,14 +232,15 @@ ax1.plot(x, uniform_pdf, label='Uniform')
 ax1.set_xlabel('Value')
 ax1.set_ylabel('Density')
 ax1.set_title(r'$\sigma$, $\alpha$ priors')
+ax1.set_ylim(y_lim)
 ax1.legend()
 
 # HalfNormal vs Uniform
 a2, b2 = 0.1, 4.0
-p_upper = 0.95
-sigma2 = b2 / (np.sqrt(2) * erfinv(p_upper))
 x2 = np.linspace(0, b2 * 1.2, 1000)
-halfnorm_pdf = np.sqrt(2 / np.pi) / sigma2 * np.exp(-x2**2 / (2 * sigma2**2))
+p_lower = 0.025
+sigma_ls2 = a2 / (np.sqrt(2) * erfinv(p_lower))
+halfnorm_pdf = np.sqrt(2 / np.pi) / sigma_ls2 * np.exp(-x2**2 / (2 * sigma_ls2**2))
 uniform2_pdf = np.where((x2 >= a2) & (x2 <= b2), 1 / (b2 - a2), 0)
 
 ax2.plot(x2, halfnorm_pdf, label='HalfNormal')
@@ -237,6 +248,7 @@ ax2.plot(x2, uniform2_pdf, label='Uniform')
 ax2.set_xlabel('Value')
 ax2.set_ylabel('Density')
 ax2.set_title(r'$\beta$ priors')
+ax2.set_ylim(y_lim)
 ax2.legend()
 ```
 
