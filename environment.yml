@@ -17,3 +17,4 @@ dependencies:
   - joblib
   - astropy
   - ruff
+  - pymc

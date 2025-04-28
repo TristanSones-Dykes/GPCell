@@ -64,7 +64,7 @@ Such that, if the OUosc model has a significantly better fit on a trace despite 
 
 Gaussian Process regression with a Gaussian likelihood admits an exact posterior, which is itself a GP characterized by an analytically tractable mean and covariance function; @rasmussen2005.
 
-The marginal likelihood (evidence) of the observations under the GP prior can be computed in closed form and differentiated with respect to hyperparameters, enabling Type II Maximum Likelihood (ML) estimation – empirical Bayes – where kernel parameters are set by maximizing the log marginal likelihood. \
+The marginal likelihood (evidence) of the observations under the GP prior can be computed in closed form and differentiated with respect to hyperparameters, enabling Type II Maximum Likelihood (ML) estimation – empirical Bayes – where kernel parameters are set by maximizing the log marginal likelihood.\
 Gradient-based optimization (e.g., using L-BFGS or conjugate gradients) is standard practice, as the derivatives of the log marginal likelihood with respect to hyperparameters can be expressed in terms of the inverse and determinant of the kernel matrix.
 
 \newpage
@@ -78,7 +78,7 @@ There are many methods here, but we will go over two major ones in GP inference.
 
 ##### 1. Markov Chain Monte Carlo (MCMC)
 
-MCMC methods, such as Hamiltonian Monte Carlo (HMC) or No-U-Turn Sampler (NUTS), draw samples from the joint posterior over latent functions and hyperparameters, yielding a full Bayesian treatment with asymptotic exactness; @titsias2011. \
+MCMC methods, such as Hamiltonian Monte Carlo (HMC) or No-U-Turn Sampler (NUTS), draw samples from the joint posterior over latent functions and hyperparameters, yielding a full Bayesian treatment with asymptotic exactness; @titsias2011.\
 Although more computationally intensive, MCMC does not rely on Gaussian approximations and is widely used when full uncertainty quantification is critical; @titsias2008.
 
 ##### 2. Variational Inference
@@ -106,6 +106,25 @@ Finally, we calculate the Bayes factor using the MCMC samples and classify into 
 
 The next step is to identify the better model and thus, whether or not each trace is oscillatory. In order to do this we calculate the Bayes factor.
 
+The problem setup is as follows. We consider $n \in \mathbb{N}$ competing models and are calculating (relative) plausibility of model $\mathscr{M}_i$ ($i = 1, ..., n$), given the prior probability model and observations $\mathbf{Y}$.\
+This, the posterior model probability $p(\mathscr{M}_i | \mathbf{Y})$, can be expanded using Bayes formula and the law of total conditional probability.
+
+$$
+p(\mathscr{M}_i|\mathbf{Y}) = \frac{p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)}{p(\mathbf{Y})} = \frac{p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)}{\sum_{j=1}^m p(\mathbf{Y}|\mathscr{M}_1)p(\mathscr{M}_i)}
+$$
+
+Where the denominator is the sum of the marginal likelihoods times the prior of all $n$ models.\
+Taking only two models, as in our scenario, we start to uncover the Bayes factor equation. We can calculate the relative posterior model plausibility of $\mathscr{M}_1$ to $\mathscr{M_2}$ by taking the ratio of the posterior probabilities of both models, also known as the posterior odds; details are in @berger2005.
+
+\begin{align}
+\frac{p(\mathscr{M}_1|\mathbf{Y})}{p(\mathscr{M}_2|\mathbf{Y})}
+&=
+\frac{p(\mathbf{Y}|\mathscr{M}_1)p(\mathscr{M}_1)}{\sum_{j=1}^2 p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)} \times \frac{\sum_{j=1}^2 p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)}{p(\mathbf{Y}|\mathscr{M}_2)p(\mathscr{M}_2)} \\
+&= \underbrace{\frac{p(\mathscr{M}_1)}{p(\mathscr{M}_2)}}_{\text{prior odds}} \times \underbrace{\frac{p(\mathbf{Y}|\mathscr{M}_1)}{p(\mathbf{Y}|\mathscr{M}_2)}}_{\text{Bayes factor}}
+\end{align}
+
+This shows that our posterior odds are a product of two factors, the prior model odds and the Bayes factor. The Bayes factor is the standard method for hypothesis testing in the Bayesian framework and, as we are using Bayesian methods to fit our GPs, we can take advantage of this after the fact.
+
 #### Savage-Dickey Ratio
 
 $$
@@ -116,9 +135,7 @@ Originally described in @dickey1971 and explained in-depth in @wagenmakers2010; 
 
 This is applicable to our problem, as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
 
-We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this by using a kernel density estimate
-
-#### Bridge Sampling
+We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this either by a standard average on the posterior samples, or by calculating a posterior kernel density estimate and evaluating that on our interval.
 
 ### **Prior choices**
 
