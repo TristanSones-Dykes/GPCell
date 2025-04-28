@@ -58,11 +58,15 @@ Thus, to create a pair of periodic and aperiodic kernels, they can take the OU k
 
 Such that, if the OUosc model has a significantly better fit on a trace despite added model complexity, then it can be reasonably concluded that the trace is oscillatory.
 
+### Inference
+
+Section on MAP, MCMC etc
+
 \newpage
 
 ## Bayesian Classification Method
 
-We develop a Bayesian classification model to classify single-cell gene expression time series as oscillatory or non-oscillatory. This approach builds upon the methodology of @phillips_identifying_2017, but we extend it by using Bayesian inference (via MCMC) for hypothesis testing and uncertainty estimation. The goal is to determine, for each single-cell time course, whether there is statistically significant evidence of an oscillatory pattern as opposed to aperiodic noise. Below, we describe the modeling setup, prior choices, inference procedure, and model comparison techniques used in GPCell’s oscillation detector.
+We investigate Bayesian classification methods to classify single-cell gene expression time series as oscillatory or non-oscillatory. This approach builds upon the methodology of @phillips_identifying_2017, but we extend it by using Bayesian inference (via MCMC) for hypothesis testing and uncertainty estimation. The goal is to determine, for each single-cell time course, whether there is statistically significant evidence of an oscillatory pattern as opposed to aperiodic noise. Below, we describe the modeling setup, prior choices, inference procedure, and model comparison techniques we used.
 
 ### Overall pipeline
 
@@ -73,20 +77,23 @@ Finally, we calculate the Bayes factor using the MCMC samples and classify into 
 
 ### Model Selection and Classification
 
-The next step is to identify the better model and thus, whether or not each trace is oscillatory. In order to do this we calculate the Bayes factor, using the Savage-Dickey ratio; @wagenmakers2010.
+The next step is to identify the better model and thus, whether or not each trace is oscillatory. In order to do this we calculate the Bayes factor.
+
+#### Savage-Dickey Ratio
 
 $$
 BF_{01} = \frac{p(D|H_0)}{p(D|H_1)} = \frac{p(\beta = 0 | D, H_1)}{p(\beta = 0 | H_1)}
 $$ {#eq-bayes-factor}
 
-This is possible as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
+Originally described in @dickey1971 and explained in-depth in @wagenmakers2010; the Savage-Dickey ratio is a method for efficiently calculating the Bayes factor of nested models, requiring only that the support of the prior distributions of the added hyperparameters in the larger model includes the value they take in the nested model.
+
+This is applicable to our problem, as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
 
 We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this by using a kernel density estimate
 
 ### **Prior choices**
 
 Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, our priors need to have a support of $[0, +\infty)$ for $\beta$ as well as being positive and well-behaved.
-
 
 \newpage
 
@@ -132,6 +139,8 @@ Using memmaps also improves the stability of the parallel processes which is vit
 
 **Just-In-Time Compilation:** For the computationally intensive Gillespie simulations, GPCell utilises `Numba`, a Just-In-Time compiler for Python. This enables the conversion of Python code (exclusively written in base Python and `Numpy`) into optimised machine code at runtime.
 
+This is a perfect use-case for JIT compilation, as the simulation functions themselves are not very complicated computationally, they just need to be ran sequentially for a lot of iterations.
+
 \newpage
 
 ### Extensibility and Modularity
@@ -174,8 +183,6 @@ In this format, $K_{OUosc}$ is defined as:
 ouosc_kernel = [Matern12, Cosine]
 ouosc_op = operator.mul  # which is the default and typically omitted
 ```
-
-\newpage
 
 To create a new kernel, one inherits from `Kernel` – or one of its subclasses like `IsotropicStationary`; alternatively, take any class/TensorFlow `Module` and make it compatible with the `Kernel` interface.\
 This is the definition of `Matern12` in GPflow as an example.

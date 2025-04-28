@@ -1,8 +1,8 @@
 # Results
 
-## Reproducing Previous Results
+## Reproduces Previous Results
 
-A key plot in @phillips_identifying_2017 is the ROC curve comparing the GP method to the Lomb-Scargle method. It is reproduced below, with added AUC values for both methods.
+A key plot in @phillips_identifying_2017 is the ROC curve plot comparing the GP method to the Lomb-Scargle method. It is reproduced below, with added AUC values for both methods.
 
 ![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png){width="65%"}
 
@@ -16,7 +16,7 @@ There were two key areas of performance improvement, in fitting models and in si
 
 ### Model Fitting
 
-Using `Joblib`, GPCell is able to fit distribute the job of fitting a set of replicate models to a trace as processes ran on separate cores.\
+Using `Joblib`, GPCell is able to distribute the job of fitting a set of replicate models to a trace, as processes ran on separate cores.\
 Shown below are the results of fitting the core BIC pipeline (OU and OUosc models) to homogeneous (matrix shaped), and non-homogeneous (jagged) datasets. This makes a difference as, through `Joblib`, GPCell is programmed to take advantage of NumPy's `memmap` when possible. It writes the square dataset to a temporary file and provides each process with a read-only reference, allowing concurrent access and reducing memory overhead.
 
 ```{r, echo=FALSE, message=FALSE}

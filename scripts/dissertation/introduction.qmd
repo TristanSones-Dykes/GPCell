@@ -36,4 +36,4 @@ Additionally, high performance MATLAB code, including GPML that @phillips_identi
 
 ## Problem Statement
 
-This presents a need for an extensible, generalisable library to easily handle Gaussian Processes and classify gene expressions into oscillatory and non-oscillatory using modern development techniques such as unit tests, consistent typing, and CI/CD. As well as a gap in the literature for a fully Bayesian approach that is as good or better than the parametric bootstrap approach.
+This presents a need for an extensible, generalisable library to easily handle Gaussian Processes and classify gene expressions into oscillatory and non-oscillatory using modern development techniques such as unit tests, consistent typing, and CI/CD. As well as a gap in the literature for a fully Bayesian approach that is at least as good as the parametric bootstrap approach; or can offer some additional benefits of Bayesian inference the current one is unable to.
