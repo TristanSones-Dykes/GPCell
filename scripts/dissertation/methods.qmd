@@ -107,11 +107,11 @@ Finally, we calculate the Bayes factor using the MCMC samples and classify into 
 The next step is to identify the better model and thus, whether or not each trace is oscillatory. In order to do this we calculate the Bayes factor.
 
 The problem setup is as follows. We consider $n \in \mathbb{N}$ competing models and are calculating (relative) plausibility of model $\mathscr{M}_i$ ($i = 1, ..., n$), given the prior probability model and observations $\mathbf{Y}$.\
-This, the posterior model probability $p(\mathscr{M}_i | \mathbf{Y})$, can be expanded using Bayes formula and the law of total conditional probability.
+For this, the posterior model probability $p(\mathscr{M}_i | \mathbf{Y})$, can be expanded using Bayes formula and the law of total conditional probability.
 
 $$
 p(\mathscr{M}_i|\mathbf{Y}) = \frac{p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)}{p(\mathbf{Y})} = \frac{p(\mathbf{Y}|\mathscr{M}_i)p(\mathscr{M}_i)}{\sum_{j=1}^m p(\mathbf{Y}|\mathscr{M}_1)p(\mathscr{M}_i)}
-$$
+$$ {#eq-posterior-prob}
 
 Where the denominator is the sum of the marginal likelihoods times the prior of all $n$ models.\
 Taking only two models, as in our scenario, we start to uncover the Bayes factor equation. We can calculate the relative posterior model plausibility of $\mathscr{M}_1$ to $\mathscr{M_2}$ by taking the ratio of the posterior probabilities of both models, also known as the posterior odds; details are in @berger2005.
@@ -123,23 +123,64 @@ Taking only two models, as in our scenario, we start to uncover the Bayes factor
 &= \underbrace{\frac{p(\mathscr{M}_1)}{p(\mathscr{M}_2)}}_{\text{prior odds}} \times \underbrace{\frac{p(\mathbf{Y}|\mathscr{M}_1)}{p(\mathbf{Y}|\mathscr{M}_2)}}_{\text{Bayes factor}}
 \end{align}
 
-This shows that our posterior odds are a product of two factors, the prior model odds and the Bayes factor. The Bayes factor is the standard method for hypothesis testing in the Bayesian framework and, as we are using Bayesian methods to fit our GPs, we can take advantage of this after the fact.
+This shows that our posterior odds are a product of two factors, the prior model odds and the Bayes factor. The Bayes factor is the standard method for hypothesis testing in the Bayesian framework and, as we are using Bayesian inference methods that enable drawing samples from the joint posterior, we can take advantage of this after the fact.
 
 #### Savage-Dickey Ratio
 
-$$
-BF_{01} = \frac{p(D|H_0)}{p(D|H_1)} = \frac{p(\beta = 0 | D, H_1)}{p(\beta = 0 | H_1)}
-$$ {#eq-bayes-factor}
+Originally described in @dickey1971 and explained in-depth in @wagenmakers2010; the Savage-Dickey ratio is a method for efficiently calculating the Bayes factor of nested models, requiring only that the support of the prior distribution of the model-difference parameter – $\delta$ – in the larger model includes the null value of that parameter $\delta_0$.\
+These requirements allow it to sidestep the requirement for full marginal integration, requiring only posterior samples of the target parameter; it does this by taking the ratio of the posterior to prior density at the null value of the model-difference parameter:
 
-Originally described in @dickey1971 and explained in-depth in @wagenmakers2010; the Savage-Dickey ratio is a method for efficiently calculating the Bayes factor of nested models, requiring only that the support of the prior distributions of the added hyperparameters in the larger model includes the value they take in the nested model.
+$$
+BF_{12} = \frac{p(\mathbf{Y}|\mathscr{M}_1)}{p(\mathbf{Y}|\mathscr{M}_2)} = \frac{p(\delta = \delta_0 | \mathbf{Y}, \mathscr{M}_1)}{p(\delta = \delta_0 | \mathscr{M}_1)}
+$$ {#eq-bayes-factor}
 
 This is applicable to our problem, as the non-oscillatory kernel equals the oscillatory kernel at $\beta = 0 \implies cos(\beta \tau) = 1$, and because the prior for that parameter includes $\beta = 0$. So, the Bayes factor is comparing the posterior density of the lengthscale parameter at 0 to the prior density at 0.
 
 We implement this by sampling $\beta$ as part of the MCMC under the oscillatory model In practice, the prior is continuous so the density at exactly 0 is theoretical; we approximate this either by a standard average on the posterior samples, or by calculating a posterior kernel density estimate and evaluating that on our interval.
 
+\newpage
+
+#### Bridge Sampling
+
+Bridge sampling is a flexible Monte Carlo method to approximate marginal likelihoods. Originally introduced in @bennett1976 and formalized by @meng1996, bridge sampling constructs an optimal “bridge” function between two densities – typically the posterior and a convenient proposal – to minimize estimator variance; @gronau2017.\
+In its basic form, given the parameter of interest $\theta$'s samples of from two corresponding normalised densities $p_i(\theta) = q_i(\theta) / c_i$ ($i = 1, 2$), the following identity holds:
+
+$$
+r \equiv \frac{c_1}{c_2} = \frac{E_2 \left[q_1(\theta) \alpha(\theta)\right]}{E_1 \left[q_2(\theta) \alpha(\theta)\right]}
+$$ {#eq-bridge-id}
+
+Where $\alpha(\theta)$ a suitably chosen bridge function. Bennett’s original work framed this in terms of free‐energy differences in physics, then Meng & Wong (1996) extended it to general normalizing‐constant estimation in statistics.\
+To then compute the Bayes factor, there are two options:
+
+##### **1. Two-step Approach**
+
+A straightforward strategy is to apply bridge sampling separately to each model to obtain their posterior marginal densities, then form their ratio. This is what is currently implemented in GPCell.
+
+In this, $p_1$ is the fit GP posterior $p(\theta | \mathbf{Y})$ and $p_2$ is a normalised multivariate normal approximation to the posterior (so $c_2$ = 1). The bridge identity (\ref{eq-bridge-id}) then specialises to:
+
+$$
+\hat p(\mathbf{Y}) = c_1 = \frac{\frac{1}{n_2}\sum_{i=1}^{n_2}q_1(\omega_i)\alpha(\omega_i)}{\frac{1}{n_1}\sum_{i=1}^{n_1}q_2(\phi_i)\alpha(\phi_i)}
+$$
+
+Where $\{\omega_i\}$ are draws from $p_2$ and $\{\phi_i\}$ are draws from the posterior GP.\
+A detailed explanation and derivation is available in @meng2002.
+
+##### 2. Direct Ratio Estimation
+
+Alternatively, bridge sampling can directly estimate the ratio $r$, corresponding to the marginal likelihoods of $\mathscr{M}_1$ and $\mathscr{M}_2$ without separate evaluations; @meng2002.\
+By treating the posterior distributions under each model as un-normalized densities, one constructs a single bridge estimator for $r$, which is exactly the Bayes factor $B_{12}$.
+
+#### Computational Considerations
+
+While the runtimes of these algorithms are quite fast, there is very little in terms of public implementation for bridge sampling in Python. @gronau2020 provides an R library for bridge sampling, and could be integrated into GPCell using `reticulate` if needed; this is exactly what @else2023 did to use bridge sampling as one of their metrics in a similar setup: *A Deep Learning Method for Comparing Bayesian Hierarchical Models.*
+
+@lao is a single short Jupyter Notebook containing a `pymc` implementation, using functions and methods long since deprecated. As this looks like one of the last general, public implementations, I translated it to modern `pymc`; this can now be used to validate Python methods using other inference backends (like GPflow or GPyTorch).
+
 ### **Prior choices**
 
-Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, our priors need to have a support of $[0, +\infty)$ for $\beta$ as well as being positive and well-behaved.
+Our models are formulated in the same way as in @phillips_identifying_2017; however, due to needing being used for the Savage-Dickey ratio and MCMC sampling, our priors need to have a support of $[0, +\infty)$ for $\beta$ as well as being positive and well-behaved in sampling.
+
+@phillips_identifying_2017 used tight, uniform priors for evaluation on the simulated dataset; in order to match these for evaluation against their method,
 
 \newpage
 

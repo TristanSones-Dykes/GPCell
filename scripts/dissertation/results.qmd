@@ -4,7 +4,7 @@
 
 A key plot in @phillips_identifying_2017 is the ROC curve plot comparing the GP method to the Lomb-Scargle method. It is reproduced below, with added AUC values for both methods.
 
-![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png){width="65%"}
+![Example simulated traces and model ROC curves, factored by simulated noise level $\sigma^2$ and trace length (time)](ROC_plot.png){width="85%"}
 
 This shows that GPCell fits the same quality models as the MATLAB implementation, on MATLAB generated data. The ROC curves don't have margins on the original plot, adding them makes spotting discrepancies between the models easier.
 
