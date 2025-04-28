@@ -158,7 +158,7 @@ $$
 \hat p(\mathbf{Y}) = c_1 = \frac{\frac{1}{n_2}\sum_{i=1}^{n_2}q_1(\omega_i)\alpha(\omega_i)}{\frac{1}{n_1}\sum_{i=1}^{n_1}q_2(\phi_i)\alpha(\phi_i)}
 $$
 
-Where $\{\omega_i\}$ are draws from $p_2$ and $\{\phi_i\}$ are draws from the posterior GP.\
+Where $\{\omega_i\}$ are draws from $p_2$ and $\{\phi_i\}$ are draws from the posterior GP. In practice, the original GP posterior samples are split into two groups; one of which is used to fit the multivariate normal approximation, which then generates\
 A detailed explanation and derivation is available in @meng2002.
 
 ##### 2. Direct Ratio Estimation
@@ -183,21 +183,64 @@ For $\sigma$ and $\alpha$, that had uniform priors on $[0.1, 2.0]$, they have no
 If $X \sim \text{LogNormal}(\mu, \sigma^2)$, then $\ln X \sim \mathcal{N}(\mu, \sigma^2)$. The 2.5% and 97.5% quantiles of $\mathcal{N}(\mu, \sigma^2)$ are $\mu \pm 1.96\sigma$, hence set:
 
 $$
-\ln(a) = \mu - 1.96\sigma, \space \ln(b) = \mu + 1.96\sigma
+\ln(a) = \mu - 1.96\sigma\text{, } \ln(b) = \mu + 1.96\sigma
 $$
 
 Which we solve to obtain:
 
-\begin{align}
-\mu &= \frac{\ln(a) + \ln(b)}{2} \\
-\sigma &= \frac{\ln(b) - \ln(a)}{2 \times 1.96}
-\end{align}
-
-The oscillatory parameter $\beta$ must include 0 in its support, so a half-normal distribution was chosen. $X \sim \text{HalfNormal}(\sigma^2)$, with the condition that 95% of its mass lies below the upper bound of its original underlying prior.
+$$
+\mu = \frac{\ln(a) + \ln(b)}{2} \text{  and  } \sigma = \frac{\ln(b) - \ln(a)}{2 \times 1.96}
+$$\
+The oscillatory parameter $\beta$ must include 0 in its support, so a half-normal distribution was chosen. $X \sim \text{HalfNormal}(\sigma^2)$, with the condition that 95% of its mass lies below the upper bound of its original underlying prior:
 
 $$
 P(X \le b) = \text{erf}(\frac{b}{\sigma \sqrt{2}}) = 0.95 \implies \sigma = \frac{b}{\sqrt{2} \text{erf}^{-1}(0.95)}
 $$
+
+```{python}
+#| echo: false
+#| warning: false
+#| fig-cap: Plots of the MCMC prior distributions used instead of the original ML priors.
+
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy.special import erfinv
+
+# LogNormal vs Uniform
+a, b = 0.1, 2.0
+mu = 0.5 * (np.log(a) + np.log(b))
+sigma = (np.log(b) - np.log(a)) / (2 * 1.96)
+
+x = np.linspace(0, b * 1.2, 1000)
+lognorm_pdf = (1 / (x * sigma * np.sqrt(2 * np.pi))) * np.exp(-((np.log(x) - mu) ** 2) / (2 * sigma ** 2))
+uniform_pdf = np.where((x >= a) & (x <= b), 1 / (b - a), 0)
+
+# Define 2 column, rectangular figure
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+ax1.plot(x, lognorm_pdf, label='LogNormal')
+ax1.plot(x, uniform_pdf, label='Uniform')
+ax1.set_xlabel('Value')
+ax1.set_ylabel('Density')
+ax1.set_title(r'$\sigma$, $\alpha$ priors')
+ax1.legend()
+
+# HalfNormal vs Uniform
+a2, b2 = 0.1, 4.0
+p_upper = 0.95
+sigma2 = b2 / (np.sqrt(2) * erfinv(p_upper))
+x2 = np.linspace(0, b2 * 1.2, 1000)
+halfnorm_pdf = np.sqrt(2 / np.pi) / sigma2 * np.exp(-x2**2 / (2 * sigma2**2))
+uniform2_pdf = np.where((x2 >= a2) & (x2 <= b2), 1 / (b2 - a2), 0)
+
+ax2.plot(x2, halfnorm_pdf, label='HalfNormal')
+ax2.plot(x2, uniform2_pdf, label='Uniform')
+ax2.set_xlabel('Value')
+ax2.set_ylabel('Density')
+ax2.set_title(r'$\beta$ priors')
+ax2.legend()
+```
+
+These were designed to slightly favour weight towards small values, as the sampler needs to be able to reach those values to provide accurate marginal calculations, especially for the Savage-Dickey ratio.
 
 \newpage
 
