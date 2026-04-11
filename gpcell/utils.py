@@ -270,8 +270,11 @@ def fit_processes_joblib(
     path = os.path.join(folder, "Y_memmap")
     os.remove(path) if os.path.exists(path) else None  # remove if exists
 
-    # Decide whether the traces are homogeneous or large
-    n_jobs = 14
+    # Decide whether the traces are homogeneous or large.
+    # Keep one core free for system responsiveness by default.
+    cpu_count = os.cpu_count() or 1
+    default_n_jobs = cpu_count - 1 if cpu_count > 1 else 1
+    n_jobs = default_n_jobs
     is_homogeneous = all(len(y) == len(Y[0]) for y in Y)
     is_large = len(Y) > 4 * n_jobs
 
@@ -293,7 +296,7 @@ def fit_processes_joblib(
 
         # Run the worker function in parallel using Joblib.
         results: List[List[GaussianProcess]] = Parallel(
-            n_jobs=14,
+            n_jobs=n_jobs,
             backend="loky",
             verbose=int(verbose),
         )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(len(Y)))  # type: ignore
@@ -337,7 +340,7 @@ def fit_processes_joblib(
             )(i, X, Y_memmap, Y_var, constructors[i], replicates)
             for i in range(len(Y))
         )
-        n_jobs = 11
+        n_jobs = default_n_jobs - 2 if default_n_jobs > 2 else 1
 
     # assert dimensions
     assert all(X[i].shape[0] == Y_mat.shape[1] for i in range(len(X))), (

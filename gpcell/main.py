@@ -54,6 +54,7 @@ from .utils import (
     detrend,
     fit_processes_joblib,
 )
+from .functional import DetectorConfig, PreparedData, fit_bic, fit_bootstrap
 
 
 # Main class
@@ -339,32 +340,37 @@ class OscillatorDetector:
         *args,
         **kwargs,
     ):
-        """
-        Fit background noise and trend models, adjust data and fit OU and OU+Oscillator models
-        """
-        # --- classify using BIC --- #
         if self.verbose:
             print("\nFitting BIC...")
 
-        # fit OU and OU+Oscillator models
-        ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
-            self.X,
-            self.Y_detrended,
-            ou_priors,
-            ou_trainables,
-            ouosc_priors,
-            ouosc_trainables,
-            10,
+        config = DetectorConfig(
+            verbose=self.verbose,
+            set_noise=self.set_noise,
+            joblib=self.joblib,
+            detrend_enabled=hasattr(self, "detrend_GPs"),
+            ou_prior_gen=self.ou_prior,
+            ouosc_prior_gen=self.ouosc_prior,
+            ou_trainables=ou_trainables,
+            ouosc_trainables=ouosc_trainables,
+            bic_replicates=10,
         )
-
-        # calculate LLR and BIC
-        (
-            self.LLRs,
-            self.BIC_diffs,
-            self.k_ou_list,
-            self.k_ouosc_list,
-            self.periods,
-        ) = self._calc_gpr_bic_llr(self.X, self.Y_detrended, ou_GPs, ouosc_GPs)
+        prepared = PreparedData(
+            X=self.X,
+            Y=self.Y,
+            Y_detrended=self.Y_detrended,
+            noise_list=[float(x) for x in self.noise_list],
+            mean_noise=float(self.mean_noise) if hasattr(self, "mean_noise") else None,
+            bckgd_GPs=self.bckgd_GPs if hasattr(self, "bckgd_GPs") else None,
+            detrend_GPs=self.detrend_GPs if hasattr(self, "detrend_GPs") else None,
+        )
+        bic = fit_bic(prepared, config)
+        self.LLRs = bic.LLRs
+        self.BIC_diffs = bic.BIC_diffs
+        self.k_ou_list = bic.k_ou_list
+        self.k_ouosc_list = bic.k_ouosc_list
+        self.periods = bic.periods
+        self.ou_GPs = bic.ou_GPs
+        self.ouosc_GPs = bic.ouosc_GPs
 
         if self.verbose:
             print(
@@ -388,111 +394,41 @@ class OscillatorDetector:
         *args,
         **kwargs,
     ):
-        # --- classification using synthetic cells --- #
         if self.verbose:
             print(f"\nGenerating synthetic data for {self.N} cells...")
 
-        # extract kwargs
-        set_noise = kwargs.get("set_noise", None)
-
-        K = 10
-        self.synth_LLRs = []
-        detrend_kernels = [GP_d.fit_gp.kernel for GP_d in self.detrend_GPs]
-
-        # for each cell, make K synthetic cells
-        for i in range(self.N):
-            X = self.X[i]
-
-            # set noise for automated testing
-            if set_noise is not None:
-                noise = set_noise
-            else:
-                noise = self.noise_list[i]
-
-            # configure synthetic cell kernel
-            k_se = detrend_kernels[i]
-            k_ou = self.k_ou_list[i]
-            k_white = White(variance=noise**2)  # type: ignore
-            k_synth = k_se + k_ou + k_white
-
-            # generate and detrend synthetic cell
-            synths = [
-                multivariate_normal(zeros(len(X)), k_synth(X)).reshape(-1, 1)  # type: ignore
-                for _ in range(K)
-            ]
-            synths_detrended, _ = detrend([X for _ in range(K)], synths, 7.0)
-
-            # fit OU and OU+Oscillator models
-            ou_GPs, ouosc_GPs = self._fit_ou_ouosc(
-                [X for _ in range(K)],
-                synths_detrended,
-                ou_priors[i],
-                ou_trainables,
-                ouosc_priors[i],
-                ouosc_trainables,
-                K,
-            )
-
-            # calculate LLR
-            LLRs, _, _, _, _ = self._calc_gpr_bic_llr(
-                [X for _ in range(K)], synths_detrended, ou_GPs, ouosc_GPs
-            )
-
-            self.synth_LLRs.extend(LLRs)
-
-        if "LLR" in self.plots:
-            self.generate_plot("LLR")
-
-        # --- classification --- #
-
-        if self.verbose:
-            print("Classifying cells...")
-
-        LLR_array = array(self.LLRs)
-        LLR_synth_array = array(self.synth_LLRs)
-
-        # filter nan's from model fitting
-        nan_inds = isnan(LLR_array)
-        LLR_array = LLR_array[~nan_inds]
-        LLR_synth_array = LLR_synth_array[~isnan(LLR_synth_array)]
-
-        # LLRs can be tiny and just negative - this just sets them to zero
-        LLR_array[LLR_array < 0] = 0
-        LLR_synth_array[LLR_synth_array < 0] = 0
-        LLR_combined = concatenate((LLR_array, LLR_synth_array), 0)
-        self.periods = array(self.periods)[~nan_inds]
-
-        upper = max(LLR_combined)
-        lower1 = min(LLR_combined)
-        lower = upper - 0.9 * (upper - lower1)
-        grid = linspace(lower, upper, 20)
-
-        piest = zeros_like(grid)
-
-        for i, cutoff in enumerate(grid):
-            num = sum(LLR_array < cutoff) / len(LLR_array)
-            denom = sum(LLR_synth_array < cutoff) / len(LLR_synth_array)
-            piest[i] = num / denom
-
-        xx = linspace(lower, upper, 100)
-        cs = CubicSpline(grid, piest)
-        yy = cs(xx)
-        piGUESS1 = yy[0]
-
-        # retain indices to restore order
-        LLR_Idx = argsort(LLR_array)
-        LLR_array_sorted = LLR_array[LLR_Idx]
-
-        q1 = zeros_like(LLR_array_sorted)
-        for i, thresh in enumerate(LLR_array_sorted):
-            q1[i] = (
-                piGUESS1
-                * (sum(LLR_synth_array >= thresh) / len(LLR_synth_array))
-                / (sum(LLR_array_sorted >= thresh) / len(LLR_array_sorted))
-            )
-
-        q_vals = q1[argsort(LLR_Idx)]
-        self.osc_filt = q_vals < 0.05
+        config = DetectorConfig(
+            verbose=self.verbose,
+            set_noise=self.set_noise,
+            joblib=self.joblib,
+            detrend_enabled=hasattr(self, "detrend_GPs"),
+            ou_prior_gen=self.ou_prior,
+            ouosc_prior_gen=self.ouosc_prior,
+            ou_trainables=ou_trainables,
+            ouosc_trainables=ouosc_trainables,
+            bic_replicates=10,
+            bootstrap_replicates=10,
+        )
+        prepared = PreparedData(
+            X=self.X,
+            Y=self.Y,
+            Y_detrended=self.Y_detrended,
+            noise_list=[float(x) for x in self.noise_list],
+            mean_noise=float(self.mean_noise) if hasattr(self, "mean_noise") else None,
+            bckgd_GPs=self.bckgd_GPs if hasattr(self, "bckgd_GPs") else None,
+            detrend_GPs=self.detrend_GPs if hasattr(self, "detrend_GPs") else None,
+        )
+        bic = fit_bic(prepared, config)
+        bootstrap = fit_bootstrap(prepared, config, bic)
+        self.LLRs = bic.LLRs
+        self.BIC_diffs = bic.BIC_diffs
+        self.k_ou_list = bic.k_ou_list
+        self.k_ouosc_list = bic.k_ouosc_list
+        self.periods = array(bic.periods)
+        self.ou_GPs = bic.ou_GPs
+        self.ouosc_GPs = bic.ouosc_GPs
+        self.synth_LLRs = bootstrap.synth_LLRs
+        self.osc_filt = bootstrap.osc_filt
 
         if self.verbose:
             print(

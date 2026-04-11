@@ -31,12 +31,12 @@ The dissertation PDF is here:
 
 ## Quick start
 
-The recommended local workflow is now `uv`.
+The recommended local workflow is now `uv` (Python 3.12+; this machine uses 3.14).
 
 Create and populate a virtual environment:
 
 ```bash
-uv venv .venv --python 3.10
+uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python "setuptools<81"
 uv pip install --python .venv/bin/python \
   numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability \
@@ -71,6 +71,23 @@ Common fitting modes:
 - `BOOTSTRAP`: runs the BIC pipeline, then generates synthetic non-oscillatory traces for thresholding.
 - `MCMC`: fits oscillatory models with GPflow/TFP samplers and computes a Savage-Dickey-style Bayes-factor approximation.
 
+## Functional API (new)
+
+GPCell now exposes a functional pipeline in addition to `OscillatorDetector`:
+
+```python
+from gpcell import DetectorConfig, load_detector_data, run_pipeline
+
+data = load_detector_data(
+    path="data/hes/Hes1_example.csv",
+    x_name="Time (h)",
+    background_name="Background",
+    y_name="Cell",
+)
+result = run_pipeline(data, DetectorConfig(joblib=True), methods=["BIC"])
+print(result.bic.BIC_diffs)
+```
+
 ## Repository map
 
 - `gpcell/`: main library code.
@@ -102,11 +119,12 @@ If you want to keep the handwritten docs and generated API docs separate, prefer
 
 Typical `uv` commands:
 
-- `uv venv .venv --python 3.10`
+- `uv venv .venv --python 3.14`
 - `uv pip install --python .venv/bin/python "setuptools<81"`
 - `uv pip install --python .venv/bin/python numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability gpflow tf-keras numba joblib astropy ruff pymc scipy arviz scikit-learn`
 - `.venv/bin/python -m unittest tests.gpflow_tests`
 - `.venv/bin/python -m unittest tests.correctness`
+- `.venv/bin/python -m ruff check .`
 
 Notes:
 

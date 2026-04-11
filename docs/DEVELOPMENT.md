@@ -5,7 +5,7 @@
 The preferred local setup is now `uv` with a project-local virtualenv:
 
 ```bash
-uv venv .venv --python 3.10
+uv venv .venv --python 3.14
 uv pip install --python .venv/bin/python "setuptools<81"
 uv pip install --python .venv/bin/python \
   numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability \
@@ -138,3 +138,17 @@ The quickest reliable way to reorient inside the codebase is:
 ## Current environment caveat
 
 If tests fail immediately with import errors such as missing `numpy`, the problem is usually the active `uv` environment rather than the project logic. Recreate or reactivate `.venv` before treating that as a code regression.
+
+## Linting
+
+Run lint checks:
+
+```bash
+.venv/bin/python -m ruff check .
+```
+
+Apply safe automatic fixes:
+
+```bash
+.venv/bin/python -m ruff check . --fix
+```

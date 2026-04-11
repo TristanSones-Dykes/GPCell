@@ -1,0 +1,48 @@
+[project]
+name = "gpcell"
+version = "0.2.0"
+description = "Gaussian-process oscillation detection for single-cell time series."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { file = "LICENSE" }
+authors = [{ name = "GPCell contributors" }]
+dependencies = [
+  "numpy",
+  "matplotlib",
+  "pandas",
+  "tensorflow",
+  "tensorflow-probability",
+  "gpflow",
+  "tf-keras",
+  "numba",
+  "joblib",
+  "astropy",
+  "pymc",
+  "scipy",
+  "arviz",
+  "scikit-learn",
+]
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["gpcell", "gpcell.backend"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+ignore = ["E731"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["gpcell"]
+
+[tool.ruff.lint.per-file-ignores]
+"gpcell/main.py" = ["B006"]
+"gpcell/utils.py" = ["B006", "B008", "B023", "B905", "E501"]
+"gpcell/backend/*.py" = ["B006", "B023", "B905", "E501"]
+"tests/*.py" = ["B007", "B905", "E741", "E501"]
