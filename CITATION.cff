@@ -1,0 +1,37 @@
+cff-version: 1.2.0
+type: software
+message: "If you use GPCell in your research, please cite the software and the foundational methodology reference listed below."
+title: "GPCell: Gaussian-process oscillation detection for single-cell time series"
+version: "0.2.0"
+abstract: "GPCell is a Python framework for Gaussian-process-based detection of oscillatory single-cell gene expression dynamics, with a modular GPflow architecture, BIC and bootstrap workflows, and parallel batch fitting utilities."
+authors:
+  - family-names: "Sones-Dykes"
+    given-names: "Tristan"
+repository-code: "https://github.com/TristanSones-Dykes/GPCell"
+url: "https://tristansones-dykes.github.io/GPCell/gpcell.html"
+license: "MIT"
+keywords:
+  - "Gaussian processes"
+  - "single-cell time series"
+  - "oscillation detection"
+  - "GPflow"
+  - "bioinformatics"
+references:
+  - type: article
+    title: "Identifying stochastic oscillations in single-cell live imaging time series using Gaussian processes"
+    authors:
+      - family-names: "Phillips"
+        given-names: "Nick E."
+      - family-names: "Manning"
+        given-names: "Cerys"
+      - family-names: "Papalopulu"
+        given-names: "Nancy"
+      - family-names: "Rattray"
+        given-names: "Magnus"
+    journal: "PLOS Computational Biology"
+    year: 2017
+    volume: 13
+    issue: 5
+    pages: "e1005479"
+    doi: "10.1371/journal.pcbi.1005479"
+    url: "https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1005479"
