@@ -810,9 +810,9 @@ class OscillatorDetector:
             peaks, _ = find_peaks(cov_ou_osc, height=0)
 
             if len(peaks) != 0:
-                period = x[peaks[0]]
+                period = float(x[peaks[0]].item())
             else:
-                period = 0
+                period = 0.0
 
             LLRs.append(LLR)
             BIC_diffs.append(BIC_diff)

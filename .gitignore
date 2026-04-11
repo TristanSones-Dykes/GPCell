@@ -1,5 +1,8 @@
 # GPcell ignores
-docs/
+docs/*
+!docs/ARCHITECTURE.md
+!docs/DEVELOPMENT.md
+!docs/JOSS_SCOPE.md
 data/simulation/
 temp/*
 

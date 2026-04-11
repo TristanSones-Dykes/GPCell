@@ -991,7 +991,7 @@ def get_time_series(
                     if exists:
                         os.remove(path)
                     print(
-                        f"Overwrite: File {'exists' if exists else "doesn't exist"} at {path}"
+                        f"Overwrite: File {'exists' if exists else 'does not exist'} at {path}"
                     )
                 # --- x and r modes --- #
                 # --- path does not exist --- #
