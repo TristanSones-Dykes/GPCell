@@ -1,17 +1,19 @@
 # Standard Library Imports
-from typing import Optional
-from functools import reduce
 import operator
+from functools import reduce
+from typing import Optional
 
 # Third-Party Library Imports
+import numpy as np
 
 # Direct Namespace Imports
-from gpflow.models import GPR, GPMC
+from gpflow.kernels import Coregion
 from gpflow.likelihoods import Gaussian
-from gpflow.utilities import set_trainable, print_summary
+from gpflow.models import GPMC, GPR
+from gpflow.utilities import set_trainable
 
 # Internal Project Imports
-from ._types import Ndarray, GPKernel, GPPriorFactory, GPPriorTrainingFlag, GPOperator
+from ._types import GPKernel, GPOperator, GPPriorFactory, GPPriorTrainingFlag, Ndarray
 from ._utils import multiple_assign
 
 
@@ -27,6 +29,8 @@ class GPRConstructor:
         trainable: GPPriorTrainingFlag = {},
         operator: Optional[GPOperator] = operator.mul,
         mcmc: bool = False,
+        coregion_output_dim: int | None = None,
+        coregion_rank: int = 1,
     ):
         """
         Defines the kernel as a single kernel or a composite kernel using given operator
@@ -43,6 +47,13 @@ class GPRConstructor:
             Operator to combine multiple kernels, by default None
         mcmc : bool, optional
             Use MCMC for inference, by default False
+        coregion_output_dim : int, optional
+            Number of coupled outputs to model with a Linear Model of Coregionalization.
+            When provided, two-dimensional targets with shape ``(n_times, n_outputs)``
+            are flattened and the input matrix is augmented with a categorical output
+            index for ``gpflow.kernels.Coregion``.
+        coregion_rank : int, optional
+            Rank of the coregionalization matrix, by default 1.
         """
         match kernels:
             case type():
@@ -58,10 +69,20 @@ class GPRConstructor:
         self.prior_gen = prior_gen
         self.trainable = trainable
         self.mcmc = mcmc
+        self.coregion_output_dim = coregion_output_dim
+        self.coregion_rank = coregion_rank
 
     def __call__(self, X: Ndarray, y: Ndarray) -> GPR | GPMC:
         # create new kernel and define model
         kernel = self.kernel()
+        if self.coregion_output_dim is not None:
+            X, y = self._prepare_coregion_data(X, y)
+            kernel.active_dims = [0]
+            kernel = kernel * Coregion(
+                output_dim=self.coregion_output_dim,
+                rank=self.coregion_rank,
+                active_dims=[1],
+            )
 
         match self.mcmc:
             case True:
@@ -111,3 +132,39 @@ class GPRConstructor:
             set_trainable(getattr(obj, attrs[-1]), trainable)
 
         return model
+
+    def _prepare_coregion_data(self, X: Ndarray, y: Ndarray) -> tuple[Ndarray, Ndarray]:
+        """
+        Convert multivariate trace data into the augmented format expected by Coregion.
+
+        Parameters
+        ----------
+        X : Ndarray
+            One-dimensional time input with shape ``(n_times,)`` or ``(n_times, 1)``.
+        y : Ndarray
+            Multivariate targets with shape ``(n_times, n_outputs)``.
+
+        Returns
+        -------
+        tuple[Ndarray, Ndarray]
+            Augmented inputs with ``[time, output_index]`` columns and flattened targets.
+        """
+        X_array = np.asarray(X, dtype=float).reshape(-1, 1)
+        y_array = np.asarray(y, dtype=float)
+
+        if y_array.ndim != 2:
+            raise ValueError("Coregion models require y with shape (n_times, n_outputs).")
+
+        n_times, n_outputs = y_array.shape
+        if X_array.shape[0] != n_times:
+            raise ValueError("X and y must contain the same number of time points.")
+        if n_outputs != self.coregion_output_dim:
+            raise ValueError(
+                f"y has {n_outputs} outputs, expected {self.coregion_output_dim}."
+            )
+
+        times = np.repeat(X_array, n_outputs, axis=0)
+        output_index = np.tile(np.arange(n_outputs, dtype=float), n_times).reshape(-1, 1)
+        X_augmented = np.hstack([times, output_index])
+        y_flat = y_array.reshape(-1, 1)
+        return X_augmented, y_flat

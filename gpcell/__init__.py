@@ -1,20 +1,22 @@
+from .backend import TimeVaryingCosine
 from .functional import (
-    BICResult as BICResult,
-    BootstrapResult as BootstrapResult,
-    DetectorConfig as DetectorConfig,
-    DetectorData as DetectorData,
-    PipelineResult as PipelineResult,
-    PreparedData as PreparedData,
-    fit_bic as fit_bic,
-    fit_bootstrap as fit_bootstrap,
-    load_detector_data as load_detector_data,
-    prepare_detector_data as prepare_detector_data,
-    run_pipeline as run_pipeline,
+    BICResult,
+    BootstrapResult,
+    DetectorConfig,
+    DetectorData,
+    PipelineResult,
+    PreparedData,
+    fit_bic,
+    fit_bootstrap,
+    load_detector_data,
+    prepare_detector_data,
+    run_pipeline,
 )
-from .main import OscillatorDetector as OscillatorDetector
+from .main import OscillatorDetector
 
 __all__ = [
     "OscillatorDetector",
+    "TimeVaryingCosine",
     "DetectorConfig",
     "DetectorData",
     "PreparedData",

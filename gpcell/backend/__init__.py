@@ -1,35 +1,35 @@
 # Standard Library Imports
-from typing import Sequence, List
+from typing import List, Sequence
 
 # Third-Party Library Imports
-
 # Direct Namespace Imports
 from numpy import ndarray
 
 # Internal Project Imports
 from ._types import (
-    Ndarray,
-    GPKernel,
-    GPPriorFactory,
     FixedPriorGen,
-    GPPriorTrainingFlag,
+    GPKernel,
     GPOperator,
     GPPrior,
+    GPPriorFactory,
+    GPPriorTrainingFlag,
+    Ndarray,
     Numeric,
 )
+from ._utils import _simulate_replicate_mod9, _simulate_replicate_mod9_nodelay
+from .gaussian_process import GaussianProcess
+from .gpr_constructor import GPRConstructor
+from .kernels import TimeVaryingCosine
 from .priors import (
     hes_ou_prior,
     hes_ouosc_prior,
+    ou_hyperparameters,
     ou_trainables,
+    ouosc_hyperparameters,
     ouosc_trainables,
     sim_ou_prior,
     sim_ouosc_prior,
-    ou_hyperparameters,
-    ouosc_hyperparameters,
 )
-from .gpr_constructor import GPRConstructor
-from .gaussian_process import GaussianProcess
-from ._utils import _simulate_replicate_mod9, _simulate_replicate_mod9_nodelay
 
 __all__ = [
     "Ndarray",
@@ -42,6 +42,7 @@ __all__ = [
     "GPPrior",
     "GPRConstructor",
     "GaussianProcess",
+    "TimeVaryingCosine",
     "_simulate_replicate_mod9",
     "_simulate_replicate_mod9_nodelay",
     "hes_ou_prior",
