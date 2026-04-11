@@ -119,9 +119,7 @@ class GaussianProcess:
         target_accept: float = 0.9,
     ):
         # Note that here we need model.trainable_parameters, not trainable_variables - only parameters can have priors!
-        sampler_helper = SamplingHelper(
-            model.log_posterior_density, model.trainable_parameters
-        )
+        sampler_helper = SamplingHelper(model.log_posterior_density, model.trainable_parameters)
 
         # define model
         match sampler.lower():
@@ -185,17 +183,12 @@ class GaussianProcess:
                 raise ValueError(f"Invalid sampler: {sampler}")
 
         # take post-constrained samples
-        self.parameter_samples = sampler_helper.convert_to_constrained_values(
-            self.samples
-        )
+        self.parameter_samples = sampler_helper.convert_to_constrained_values(self.samples)
 
         # map parameter names to indices
-        self.param_to_name = {
-            param: name for name, param in parameter_dict(model).items()
-        }
+        self.param_to_name = {param: name for name, param in parameter_dict(model).items()}
         self.name_to_index = {
-            self.param_to_name[param]: i
-            for i, param in enumerate(model.trainable_parameters)
+            self.param_to_name[param]: i for i, param in enumerate(model.trainable_parameters)
         }
         self.trainable_parameters = model.trainable_parameters
 
@@ -281,9 +274,7 @@ class GaussianProcess:
                 plt.xlabel("Sampler iteration")
                 plt.ylabel("hyperparameter value")
             case _:
-                raise ValueError(
-                    "hyperparameters must be a string or a list of strings"
-                )
+                raise ValueError("hyperparameters must be a string or a list of strings")
 
     def plot_posterior_marginal(self, hyperparameter: str, constrained: bool = False):
         """

@@ -35,9 +35,7 @@ def multiple_assign(module: Module, parameters: GPPrior) -> None:
         _set_parameter_by_key(module, key, value)
 
 
-def _set_parameter_by_key(
-    module: Module, key: str, value: Union[Parameter, Numeric, str]
-):
+def _set_parameter_by_key(module: Module, key: str, value: Union[Parameter, Numeric, str]):
     """
     Sets a parameter in a module by key
 

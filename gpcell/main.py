@@ -59,9 +59,7 @@ from .functional import DetectorConfig, PreparedData, fit_bic, fit_bootstrap
 
 # Main class
 class OscillatorDetector:
-    def __init__(
-        self, X: Sequence[Ndarray], Y: Sequence[Ndarray], N: int, *args, **kwargs
-    ):
+    def __init__(self, X: Sequence[Ndarray], Y: Sequence[Ndarray], N: int, *args, **kwargs):
         # default arguments
         default_kwargs = {
             "verbose": False,
@@ -121,13 +119,9 @@ class OscillatorDetector:
 
         if self.verbose:
             if self.set_noise is None:
-                print(
-                    f"\nLoaded data with {self.N} cells and {self.M} background noise models"
-                )
+                print(f"\nLoaded data with {self.N} cells and {self.M} background noise models")
             else:
-                print(
-                    f"\nLoaded data with {self.N} cells, noise set to {self.set_noise}"
-                )
+                print(f"\nLoaded data with {self.N} cells, noise set to {self.set_noise}")
 
             print(f"Plots: {'on' if self.plots else 'off'}")
 
@@ -144,9 +138,7 @@ class OscillatorDetector:
 
         # --- detrend data --- #
         if kwargs.get("detrend", True):
-            self.Y_detrended, self.detrend_GPs = detrend(
-                self.X, self.Y, 7.0, verbose=self.verbose
-            )
+            self.Y_detrended, self.detrend_GPs = detrend(self.X, self.Y, 7.0, verbose=self.verbose)
         else:
             self.Y_detrended = self.Y
 
@@ -241,24 +233,19 @@ class OscillatorDetector:
                 # prior is either callable or list of callables
                 match self.ou_prior:
                     case Callable():
-                        ou_priors = [
-                            partial(self.ou_prior, noise) for noise in self.noise_list
-                        ]
+                        ou_priors = [partial(self.ou_prior, noise) for noise in self.noise_list]
                     case list():
                         ou_priors = [
                             partial(prior, noise)
                             for prior, noise in zip(self.ou_prior, self.noise_list)
                         ]
                     case _:
-                        raise ValueError(
-                            "ou_prior must be a callable or list of callables"
-                        )
+                        raise ValueError("ou_prior must be a callable or list of callables")
 
                 match self.ouosc_prior:
                     case Callable():
                         ouosc_priors = [
-                            partial(self.ouosc_prior, noise)
-                            for noise in self.noise_list
+                            partial(self.ouosc_prior, noise) for noise in self.noise_list
                         ]
                     case list():
                         ouosc_priors = [
@@ -266,9 +253,7 @@ class OscillatorDetector:
                             for prior, noise in zip(self.ouosc_prior, self.noise_list)
                         ]
                     case _:
-                        raise ValueError(
-                            "ouosc_prior must be a callable or list of callables"
-                        )
+                        raise ValueError("ouosc_prior must be a callable or list of callables")
             case False:
                 ou_priors = [
                     lambda noise=noise: {
@@ -475,9 +460,7 @@ class OscillatorDetector:
             sample_list = [gp.samples for gp in gp_list]
 
             # get beta samples
-            beta_idx_list = [
-                gp.name_to_index[".kernel.kernels[1].lengthscales"] for gp in gp_list
-            ]
+            beta_idx_list = [gp.name_to_index[".kernel.kernels[1].lengthscales"] for gp in gp_list]
             sample_list = array(
                 [gp.samples[beta_idx] for gp, beta_idx in zip(gp_list, beta_idx_list)]
             )
@@ -522,9 +505,7 @@ class OscillatorDetector:
             eps = 0.2
             prior_mass = float(prior_dist.cdf(eps) - prior_dist.cdf(0.0))  # type: ignore
             posterior_mass = float(mean(posterior_samples < eps))
-            print(
-                f"Cell {i + 1} prior mass: {prior_mass}, posterior mass: {posterior_mass}"
-            )
+            print(f"Cell {i + 1} prior mass: {prior_mass}, posterior mass: {posterior_mass}")
             # compute Bayes factor
             bf = posterior_mass / prior_mass
 
@@ -669,11 +650,7 @@ class OscillatorDetector:
                                         [x],
                                         [y],
                                         Matern12,
-                                        [
-                                            lambda noise=self.noise_list[
-                                                i
-                                            ]: self.ou_prior(noise)
-                                        ],
+                                        [lambda noise=self.noise_list[i]: self.ou_prior(noise)],
                                         replicates=10,
                                         trainable=self.ou_trainables,
                                     )
@@ -687,11 +664,7 @@ class OscillatorDetector:
                                         [x],
                                         [y],
                                         [Matern12, Cosine],
-                                        [
-                                            lambda noise=self.noise_list[
-                                                i
-                                            ]: self.ouosc_prior(noise)
-                                        ],
+                                        [lambda noise=self.noise_list[i]: self.ouosc_prior(noise)],
                                         replicates=10,
                                         trainable=self.ouosc_trainables,
                                     )
@@ -824,9 +797,7 @@ class OscillatorDetector:
                 plt.subplot(dim, dim, i + 1)
                 plt.plot(x, y_detrended, label="Detrended")
                 plt.plot(x, y_standardised, label="True Data")
-                plt.plot(
-                    x, y_trend, label="Trend", color="k", alpha=0.5, linestyle="dashed"
-                )
+                plt.plot(x, y_trend, label="Trend", color="k", alpha=0.5, linestyle="dashed")
                 plt.title(f"Cell {i + 1}")
 
         elif target == "BIC":
@@ -864,9 +835,7 @@ class OscillatorDetector:
             else:
                 ou_GPs = self.ou_GPs  # type: ignore
 
-            print(
-                f"Number of cells: {self.N}, Number of rows: {row}, Number of cols: {col}"
-            )
+            print(f"Number of cells: {self.N}, Number of rows: {row}, Number of cols: {col}")
 
             fig = plt.figure(figsize=(2.5 * plot_size * col, plot_size * row))
             param = ouosc_hyperparameters[-1]

@@ -62,9 +62,7 @@ class FixedPriorGen(ABC):
 
 
 GPPriorTrainingFlag = (
-    Mapping[str, bool]
-    | Mapping[Tuple[int, str], bool]
-    | Mapping[Union[str, Tuple[int, str]], bool]
+    Mapping[str, bool] | Mapping[Tuple[int, str], bool] | Mapping[Union[str, Tuple[int, str]], bool]
 )
 """
 Type for setting which parameters of a kernel are trainable.\n

@@ -83,7 +83,9 @@ class PipelineResult:
     bootstrap: BootstrapResult | None = None
 
 
-def load_detector_data(path: str, x_name: str, background_name: str, y_name: str, *, set_noise: float | None = None) -> DetectorData:
+def load_detector_data(
+    path: str, x_name: str, background_name: str, y_name: str, *, set_noise: float | None = None
+) -> DetectorData:
     X, Y = load_data(path, x_name, y_name)
     if set_noise is not None:
         return DetectorData(X=X, Y=Y)
@@ -95,7 +97,9 @@ def prepare_detector_data(data: DetectorData, config: DetectorConfig) -> Prepare
     if config.set_noise is None:
         if data.X_bckgd is None or data.bckgd is None:
             raise ValueError("Background traces are required unless set_noise is provided.")
-        mean_noise, bckgd_gps = background_noise(data.X_bckgd, data.bckgd, 7.0, verbose=config.verbose)
+        mean_noise, bckgd_gps = background_noise(
+            data.X_bckgd, data.bckgd, 7.0, verbose=config.verbose
+        )
         noise_list = [float(mean_noise / np.std(y)) for y in data.Y]
     else:
         mean_noise, bckgd_gps = None, None
@@ -132,11 +136,24 @@ def _build_prior_lists(config: DetectorConfig, noise_list: Sequence[float]):
         return ou_priors, ouosc_priors
 
     ou_priors = [
-        (lambda noise=noise: {"kernel.lengthscales": uniform(0.1, 2.0), "kernel.variance": uniform(0.1, 2.0), "likelihood.variance": noise**2})
+        (
+            lambda noise=noise: {
+                "kernel.lengthscales": uniform(0.1, 2.0),
+                "kernel.variance": uniform(0.1, 2.0),
+                "likelihood.variance": noise**2,
+            }
+        )
         for noise in noise_list
     ]
     ouosc_priors = [
-        (lambda noise=noise: {"kernel.kernels[0].lengthscales": uniform(0.1, 2.0), "kernel.kernels[0].variance": uniform(0.1, 2.0), "kernel.kernels[1].lengthscales": uniform(0.1, 4.0), "likelihood.variance": noise**2})
+        (
+            lambda noise=noise: {
+                "kernel.kernels[0].lengthscales": uniform(0.1, 2.0),
+                "kernel.kernels[0].variance": uniform(0.1, 2.0),
+                "kernel.kernels[1].lengthscales": uniform(0.1, 4.0),
+                "likelihood.variance": noise**2,
+            }
+        )
         for noise in noise_list
     ]
     return ou_priors, ouosc_priors
@@ -164,7 +181,16 @@ def _fit_ou_ouosc(
         fit_fn = fit_processes_joblib
     else:
         fit_fn = fit_processes
-    ou_gps = fit_fn(X, Y, Matern12, ou_priors, replicates=replicates, trainable=ou_trainables, mcmc=mcmc, verbose=verbose)
+    ou_gps = fit_fn(
+        X,
+        Y,
+        Matern12,
+        ou_priors,
+        replicates=replicates,
+        trainable=ou_trainables,
+        mcmc=mcmc,
+        verbose=verbose,
+    )
     ouosc_gps = fit_fn(
         X,
         Y,
@@ -312,7 +338,9 @@ def fit_bic(prepared: PreparedData, config: DetectorConfig) -> BICResult:
     )
 
 
-def fit_bootstrap(prepared: PreparedData, config: DetectorConfig, bic: BICResult) -> BootstrapResult:
+def fit_bootstrap(
+    prepared: PreparedData, config: DetectorConfig, bic: BICResult
+) -> BootstrapResult:
     if prepared.detrend_GPs is None:
         raise ValueError("Bootstrap requires detrended traces and detrend GP models.")
     ou_priors, ouosc_priors = _build_prior_lists(config, prepared.noise_list)
@@ -325,7 +353,10 @@ def fit_bootstrap(prepared: PreparedData, config: DetectorConfig, bic: BICResult
         k_ou = bic.k_ou_list[i]
         k_white = White(variance=noise**2)  # type: ignore[arg-type]
         k_synth = k_se + k_ou + k_white
-        synths = [multivariate_normal(np.zeros(len(x)), k_synth(x)).reshape(-1, 1) for _ in range(config.bootstrap_replicates)]  # type: ignore[misc]
+        synths = [
+            multivariate_normal(np.zeros(len(x)), k_synth(x)).reshape(-1, 1)
+            for _ in range(config.bootstrap_replicates)
+        ]  # type: ignore[misc]
         synths_detrended, _ = detrend([x for _ in range(config.bootstrap_replicates)], synths, 7.0)
         ou_gps, ouosc_gps = _fit_ou_ouosc(
             [x for _ in range(config.bootstrap_replicates)],
@@ -367,7 +398,9 @@ def fit_bootstrap(prepared: PreparedData, config: DetectorConfig, bic: BICResult
     grid = np.linspace(lower, upper, 20)
     piest = np.zeros_like(grid)
     for i, cutoff in enumerate(grid):
-        piest[i] = (np.sum(llr_array < cutoff) / len(llr_array)) / (np.sum(synth_array < cutoff) / len(synth_array))
+        piest[i] = (np.sum(llr_array < cutoff) / len(llr_array)) / (
+            np.sum(synth_array < cutoff) / len(synth_array)
+        )
     xx = np.linspace(lower, upper, 100)
     cs = CubicSpline(grid, piest)
     pi_guess = cs(xx)[0]
@@ -376,12 +409,18 @@ def fit_bootstrap(prepared: PreparedData, config: DetectorConfig, bic: BICResult
     llr_sorted = llr_array[llr_idx]
     q1 = np.zeros_like(llr_sorted)
     for i, thresh in enumerate(llr_sorted):
-        q1[i] = pi_guess * (np.sum(synth_array >= thresh) / len(synth_array)) / (np.sum(llr_sorted >= thresh) / len(llr_sorted))
+        q1[i] = (
+            pi_guess
+            * (np.sum(synth_array >= thresh) / len(synth_array))
+            / (np.sum(llr_sorted >= thresh) / len(llr_sorted))
+        )
     q_vals = q1[np.argsort(llr_idx)]
     return BootstrapResult(synth_LLRs=synth_llrs, osc_filt=q_vals < 0.05)
 
 
-def run_pipeline(data: DetectorData, config: DetectorConfig, methods: str | Sequence[str] | None = None) -> PipelineResult:
+def run_pipeline(
+    data: DetectorData, config: DetectorConfig, methods: str | Sequence[str] | None = None
+) -> PipelineResult:
     prepared = prepare_detector_data(data, config)
     if methods is None:
         methods = ["BIC"]

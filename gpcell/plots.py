@@ -72,17 +72,11 @@ def plot_rocs_and_timeseries(
     #  - For example, dataNORMEDX.shape[1] should be >= 2 to plot columns 0 and 1
     #  - If shapes are invalid, you can raise an error or skip those subplots.
     if dataNORMED1.shape[1] < 2:
-        print(
-            "Warning: dataNORMED1 has fewer than 2 columns, skipping second trace plot."
-        )
+        print("Warning: dataNORMED1 has fewer than 2 columns, skipping second trace plot.")
     if dataNORMED2.shape[1] < 2:
-        print(
-            "Warning: dataNORMED2 has fewer than 2 columns, skipping second trace plot."
-        )
+        print("Warning: dataNORMED2 has fewer than 2 columns, skipping second trace plot.")
     if dataNORMED3.shape[1] < 2:
-        print(
-            "Warning: dataNORMED3 has fewer than 2 columns, skipping second trace plot."
-        )
+        print("Warning: dataNORMED3 has fewer than 2 columns, skipping second trace plot.")
 
     plt.figure(figsize=(15, 15))
 

@@ -76,13 +76,9 @@ def hes_mcmc_ou_priors(noise: Numeric) -> GPPrior:
 
 def hes_mcmc_ouosc_priors(noise: Numeric) -> GPPrior:
     return {
-        "kernel.kernels[0].lengthscales.prior": tfd.Uniform(
-            low=f64(0.1), high=f64(2.0)
-        ),
+        "kernel.kernels[0].lengthscales.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
         "kernel.kernels[0].variance.prior": tfd.Uniform(low=f64(0.1), high=f64(2.0)),
-        "kernel.kernels[1].lengthscales.prior": tfd.Uniform(
-            low=f64(0.1), high=f64(4.0)
-        ),
+        "kernel.kernels[1].lengthscales.prior": tfd.Uniform(low=f64(0.1), high=f64(4.0)),
         "likelihood.variance": noise**2,
     }
 
@@ -127,9 +123,7 @@ def sd_ouosc_priors(noise: Numeric) -> GPPrior:
         # "kernel.kernels[1].lengthscales.prior": tfd.LogNormal(
         #     loc=f64(0.0), scale=f64(1.0)
         # ),
-        "kernel.kernels[1].lengthscales.prior": tfd.HalfNormal(
-            scale=f64(3.1910159349643954)
-        ),
+        "kernel.kernels[1].lengthscales.prior": tfd.HalfNormal(scale=f64(3.1910159349643954)),
         "likelihood.variance": noise**2,
     }
 

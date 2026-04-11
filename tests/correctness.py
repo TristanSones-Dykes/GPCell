@@ -41,16 +41,12 @@ class TestCorrectness(unittest.TestCase):
 
         # calculate background noise
         print("Calculating background noise\n")
-        cls.mean_noise, cls.bckgd_GPs = utils.background_noise(
-            cls.X_bckgd, cls.bckgd, 7.0
-        )
+        cls.mean_noise, cls.bckgd_GPs = utils.background_noise(cls.X_bckgd, cls.bckgd, 7.0)
         cls.noise_list = [cls.mean_noise / np.std(y) for y in cls.Y]
         print(f"GPCell: {cls.mean_noise}, {[float(gp.noise) for gp in cls.bckgd_GPs]}")
 
         # generate priors
-        cls.OU_prior_gens, cls.OUosc_prior_gens = generate_prior_data(
-            cls.N, cls.noise_list, 5
-        )
+        cls.OU_prior_gens, cls.OUosc_prior_gens = generate_prior_data(cls.N, cls.noise_list, 5)
 
         # run the original analysis
         (
@@ -482,9 +478,7 @@ def bootstrap_analysis(
         k_synth = k_se + k_ou + k_white
 
         for repeat in range(repeats):
-            y_synth = np.random.multivariate_normal(
-                np.zeros(len(X)), k_synth(X)
-            ).reshape(-1, 1)
+            y_synth = np.random.multivariate_normal(np.zeros(len(X)), k_synth(X)).reshape(-1, 1)
             k_trend, mean_trend, var_trend, Y_detrended = detrend_cell(X, y_synth, 7.0)
             LLR, BICdiff, k_ou, k_ou_osc = fit_models(
                 X, Y_detrended, noise, 10, OU_prior_gens[cell], OUosc_prior_gens[cell]

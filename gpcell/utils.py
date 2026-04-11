@@ -139,16 +139,13 @@ def fit_processes(
     # Generators and dimension checks
     match prior_gen:
         case gen if callable(gen):
-            constructors = [
-                GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc) for _ in Y
-            ]
+            constructors = [GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc) for _ in Y]
         case list():
             assert len(prior_gen) == len(Y), ValueError(
                 f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
             )
             constructors = [
-                GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc)
-                for gen in prior_gen
+                GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc) for gen in prior_gen
             ]
 
     # Preprocess traces
@@ -173,9 +170,7 @@ def fit_processes(
 
             def iterate_processes():
                 for x, y, constructor in zip(X, Y_processed, constructors):
-                    new_processes = [
-                        GaussianProcess(constructor) for _ in range(replicates)
-                    ]
+                    new_processes = [GaussianProcess(constructor) for _ in range(replicates)]
                     for i, process in enumerate(new_processes):
                         process.fit(x, y, Y_var, verbose)
 
@@ -240,8 +235,7 @@ def fit_processes_joblib(
     # Determine the constructors.
     if callable(prior_gen):
         constructors = [
-            GPRConstructor(kernels, prior_gen, trainable, operator, mcmc=mcmc)
-            for _ in Y
+            GPRConstructor(kernels, prior_gen, trainable, operator, mcmc=mcmc) for _ in Y
         ]
     else:
         if len(prior_gen) != len(Y):
@@ -249,8 +243,7 @@ def fit_processes_joblib(
                 f"Number of generators ({len(prior_gen)}) must match number of traces ({len(Y)})"
             )
         constructors = [
-            GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc)
-            for gen in prior_gen
+            GPRConstructor(kernels, gen, trainable, operator, mcmc=mcmc) for gen in prior_gen
         ]
 
     # Preprocess traces.
@@ -282,9 +275,7 @@ def fit_processes_joblib(
     if not is_homogeneous and not is_large:
         print(f"\nSmall, non-homogenous traces: {len(Y)} cells")
 
-        def joblib_fit_trace_worker(
-            i: int, constructor: GPRConstructor
-        ) -> List[GaussianProcess]:
+        def joblib_fit_trace_worker(i: int, constructor: GPRConstructor) -> List[GaussianProcess]:
             x = X[i]
             y = Y_preprocessed[i]
             models = []
@@ -319,9 +310,7 @@ def fit_processes_joblib(
 
         # create worker calls
         delayed_calls = (
-            delayed(_joblib_fit_memmap_worker)(
-                i, X, Y_memmap, Y_var, constructors[i], replicates
-            )
+            delayed(_joblib_fit_memmap_worker)(i, X, Y_memmap, Y_var, constructors[i], replicates)
             for i in range(len(Y))
         )
     # large traces
@@ -335,9 +324,9 @@ def fit_processes_joblib(
 
         # create (partial) worker calls with true lengths
         delayed_calls = (
-            delayed(
-                partial(_joblib_nonhomog_fit_memmap_worker, true_length=orig_lengths[i])
-            )(i, X, Y_memmap, Y_var, constructors[i], replicates)
+            delayed(partial(_joblib_nonhomog_fit_memmap_worker, true_length=orig_lengths[i]))(
+                i, X, Y_memmap, Y_var, constructors[i], replicates
+            )
             for i in range(len(Y))
         )
         n_jobs = default_n_jobs - 2 if default_n_jobs > 2 else 1
@@ -473,9 +462,7 @@ def benchmark_memmap_performance(
         start = time.time()
 
         # Time includes method specific setup (def functions or make memmap)
-        def joblib_fit_trace_worker(
-            i: int, constructor: GPRConstructor
-        ) -> List[GaussianProcess]:
+        def joblib_fit_trace_worker(i: int, constructor: GPRConstructor) -> List[GaussianProcess]:
             x = X[i]
             y = Y[i]
             models = []
@@ -491,9 +478,7 @@ def benchmark_memmap_performance(
         )(delayed(joblib_fit_trace_worker)(i, constructors[i]) for i in range(N))
 
         time_no_memmap = time.time() - start
-        print(
-            f"Max length: {max_length}, Number of traces: {N}, Naive Time: {time_no_memmap}"
-        )
+        print(f"Max length: {max_length}, Number of traces: {N}, Naive Time: {time_no_memmap}")
 
         # Calculate speed gain and store in results matrix
         row_idx = max_length_values.index(max_length)
@@ -541,9 +526,7 @@ def benchmark_memmap_performance(
         os.remove(path)
 
         time_with_memmap = time.time() - start
-        print(
-            f"Max length: {max_length}, Number of traces: {N}, Memmap Time: {time_with_memmap}"
-        )
+        print(f"Max length: {max_length}, Number of traces: {N}, Memmap Time: {time_with_memmap}")
 
         # Calculate speed gain and store in results matrix
         row_idx = max_length_values.index(max_length)
@@ -616,9 +599,7 @@ def detrend(
             prior_gen = lambda: {  # noqa: E731
                 "kernel.lengthscales": Parameter(
                     to_default_float(detrend_lengthscale + 0.1),
-                    transform=tfp.bijectors.Softplus(
-                        low=to_default_float(detrend_lengthscale)
-                    ),
+                    transform=tfp.bijectors.Softplus(low=to_default_float(detrend_lengthscale)),
                 ),
             }
         case int():
@@ -687,9 +668,7 @@ def background_noise(
     Y_centred = [y - mean(y) for y in Y]
 
     # Fit noise processes
-    processes = fit_processes(
-        X, Y_centred, RBF, prior_gen, Y_var=True, verbose=verbose
-    )[0]
+    processes = fit_processes(X, Y_centred, RBF, prior_gen, Y_var=True, verbose=verbose)[0]
 
     # Calculate noise
     std_array = [gp.noise for gp in processes]
@@ -773,9 +752,7 @@ def pad_traces(
         if trace.ndim == 1:
             padded[idx, : orig_lengths[idx], 0] = trace
         else:
-            padded[idx, : orig_lengths[idx], :] = (
-                trace  # preserves full 2D data correctly
-            )
+            padded[idx, : orig_lengths[idx], :] = trace  # preserves full 2D data correctly
 
     return padded, orig_lengths
 
@@ -865,10 +842,7 @@ def gillespie_timing_mod9(
 
     with ProcessPoolExecutor() as executor:
         # Submit each replicate as a separate process.
-        futures = {
-            executor.submit(_simulate_replicate_mod9, *arg): i
-            for i, arg in enumerate(args)
-        }
+        futures = {executor.submit(_simulate_replicate_mod9, *arg): i for i, arg in enumerate(args)}
         for future in as_completed(futures):
             i = futures[future]
             try:
@@ -878,9 +852,7 @@ def gillespie_timing_mod9(
                 # if (i + 1) % 10 == 0:
                 #     print(f"gillespie_timing_mod9: Replicate {i + 1} finished.")
             except Exception as e:
-                print(
-                    f"gillespie_timing_mod9: Replicate {i + 1} raised an exception: {e}"
-                )
+                print(f"gillespie_timing_mod9: Replicate {i + 1} raised an exception: {e}")
 
     return mout, pout
 
@@ -910,8 +882,7 @@ def gillespie_timing_mod9_nodelay(
 
     with ProcessPoolExecutor() as executor:
         futures = {
-            executor.submit(_simulate_replicate_mod9_nodelay, *arg): i
-            for i, arg in enumerate(args)
+            executor.submit(_simulate_replicate_mod9_nodelay, *arg): i for i, arg in enumerate(args)
         }
         for future in as_completed(futures):
             i = futures[future]
@@ -922,9 +893,7 @@ def gillespie_timing_mod9_nodelay(
                 # if (i + 1) % 10 == 0:
                 #     print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} finished.")
             except Exception as e:
-                print(
-                    f"gillespie_timing_mod9_nodelay: Replicate {i + 1} raised an exception: {e}"
-                )
+                print(f"gillespie_timing_mod9_nodelay: Replicate {i + 1} raised an exception: {e}")
 
     return mout, pout
 
@@ -993,16 +962,12 @@ def get_time_series(
                     # remove file if it exists
                     if exists:
                         os.remove(path)
-                    print(
-                        f"Overwrite: File {'exists' if exists else 'does not exist'} at {path}"
-                    )
+                    print(f"Overwrite: File {'exists' if exists else 'does not exist'} at {path}")
                 # --- x and r modes --- #
                 # --- path does not exist --- #
                 case "r", False:
                     # read-only path provided but does not exist
-                    raise FileNotFoundError(
-                        f"Cannot read from non-existent file: {path}"
-                    )
+                    raise FileNotFoundError(f"Cannot read from non-existent file: {path}")
                 case "x", False:
                     # exclusive-write path provided but does not exist
                     print(f"Exclusive: File does not exist at {path}, simulating")
@@ -1012,9 +977,7 @@ def get_time_series(
                     print(f"Simulation data found at {path}, mode: {mode}")
                     return load_sim(path)
                 case _:
-                    raise ValueError(
-                        f"Invalid combination of mode ({mode}) and path ({path})"
-                    )
+                    raise ValueError(f"Invalid combination of mode ({mode}) and path ({path})")
         case _:
             raise ValueError(f"Invalid combination of mode ({mode}) and path ({path})")
 
@@ -1027,9 +990,7 @@ def get_time_series(
     pstart = 30 * N
 
     # Run the simulations
-    mout1, pout1 = gillespie_timing_mod9_nodelay(
-        N, par1, n_cells, mstart, pstart, out_times
-    )
+    mout1, pout1 = gillespie_timing_mod9_nodelay(N, par1, n_cells, mstart, pstart, out_times)
     mout2, pout2 = gillespie_timing_mod9(N, par2, n_cells, mstart, pstart, out_times)
 
     # In MATLAB, x = Output_Times' and then x = (x-5000)/60.

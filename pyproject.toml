@@ -23,6 +23,13 @@ dependencies = [
   "scikit-learn",
 ]
 
+[project.optional-dependencies]
+ci = [
+  "pdoc",
+  "ruff",
+  "setuptools>=68,<81",
+]
+
 [build-system]
 requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
