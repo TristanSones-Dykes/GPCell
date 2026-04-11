@@ -29,18 +29,16 @@ The dissertation PDF is here:
 
 - [`scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf`](scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf)
 
-## Quick start
+## Quick Start
 
-The recommended local workflow is now `uv` (Python 3.12+; this machine uses 3.14).
+The recommended local workflow is `uv` with a project-local virtual environment. CI uses
+Python 3.12, so that is the best default for a fresh setup.
 
 Create and populate a virtual environment:
 
 ```bash
-uv venv .venv --python 3.14
-uv pip install --python .venv/bin/python "setuptools<81"
-uv pip install --python .venv/bin/python \
-  numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability \
-  gpflow tf-keras numba joblib astropy ruff pymc scipy arviz scikit-learn
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -e ".[ci]"
 ```
 
 Examples below assume the project dependencies are installed in that environment.
@@ -71,9 +69,11 @@ Common fitting modes:
 - `BOOTSTRAP`: runs the BIC pipeline, then generates synthetic non-oscillatory traces for thresholding.
 - `MCMC`: fits oscillatory models with GPflow/TFP samplers and computes a Savage-Dickey-style Bayes-factor approximation.
 
-## Functional API (new)
+## Functional API
 
-GPCell now exposes a functional pipeline in addition to `OscillatorDetector`:
+GPCell exposes a functional pipeline in addition to `OscillatorDetector`. The class API
+remains supported for existing scripts, while new workflow code can use typed dataclass
+results:
 
 ```python
 from gpcell import DetectorConfig, load_detector_data, run_pipeline
@@ -87,6 +87,9 @@ data = load_detector_data(
 result = run_pipeline(data, DetectorConfig(joblib=True), methods=["BIC"])
 print(result.bic.BIC_diffs)
 ```
+
+The functional API currently supports the BIC and bootstrap paths. The MCMC path remains
+available through `OscillatorDetector` and is still treated as experimental.
 
 ## Repository map
 
@@ -108,10 +111,10 @@ Start here for project-level docs:
 - [`docs/JOSS_SCOPE.md`](docs/JOSS_SCOPE.md)
 - [`AGENTS.md`](AGENTS.md)
 
-Generated API docs are published from CI with `pdoc`. Locally, the historical commands are:
+Generated API docs are published from CI with `pdoc`. Locally, run:
 
-- `pdoc gpcell`
-- `pdoc -o docs gpcell`
+- `.venv/bin/pdoc --docformat numpy gpcell`
+- `.venv/bin/pdoc --docformat numpy -o docs gpcell`
 
 If you want to keep the handwritten docs and generated API docs separate, prefer a local output directory such as `site/` or `docs/api/`.
 
@@ -119,18 +122,36 @@ If you want to keep the handwritten docs and generated API docs separate, prefer
 
 Typical `uv` commands:
 
-- `uv venv .venv --python 3.14`
-- `uv pip install --python .venv/bin/python "setuptools<81"`
-- `uv pip install --python .venv/bin/python numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability gpflow tf-keras numba joblib astropy ruff pymc scipy arviz scikit-learn`
+- `uv venv .venv --python 3.12`
+- `uv pip install --python .venv/bin/python -e ".[ci]"`
 - `.venv/bin/python -m unittest tests.gpflow_tests`
 - `.venv/bin/python -m unittest tests.correctness`
-- `.venv/bin/python -m ruff check .`
+- `.venv/bin/python -m unittest tests.characterization_tests tests.functional_api_tests`
+- `.venv/bin/ruff check .`
+- `.venv/bin/ruff format --check gpcell tests`
 
 Notes:
 
 - `gpflow` still imports `pkg_resources`, so the environment currently needs `setuptools<81`.
 - `environment.yml` remains in the repository as a legacy Conda description, but `uv` is now the preferred local setup.
 - The current `Makefile` still assumes a `python` executable is available on `PATH`.
+
+## Paper and dissertation build
+
+The rendered dissertation PDF lives at:
+
+- [`scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf`](scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf)
+
+To rebuild it locally, install the extra notebook and R render dependencies:
+
+```bash
+uv pip install --python .venv/bin/python nbformat nbclient nbconvert
+Rscript -e 'install.packages(c("rmarkdown", "tidyverse"), repos="https://cloud.r-project.org")'
+PATH="$(pwd)/.venv/bin:$PATH" quarto render scripts/dissertation --to pdf
+```
+
+The `PATH` prefix matters because Quarto otherwise may choose a system Python without the
+project's GPflow/Jupyter dependencies.
 
 ## Dissertation to JOSS
 

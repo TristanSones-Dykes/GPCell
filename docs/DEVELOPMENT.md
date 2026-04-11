@@ -2,14 +2,12 @@
 
 ## Setup
 
-The preferred local setup is now `uv` with a project-local virtualenv:
+The preferred local setup is `uv` with a project-local virtualenv. CI uses Python 3.12, so
+use that unless you are deliberately testing another interpreter:
 
 ```bash
-uv venv .venv --python 3.14
-uv pip install --python .venv/bin/python "setuptools<81"
-uv pip install --python .venv/bin/python \
-  numpy matplotlib pandas pdoc ipykernel tensorflow tensorflow-probability \
-  gpflow tf-keras numba joblib astropy ruff pymc scipy arviz scikit-learn
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -e ".[ci]"
 ```
 
 Why the setuptools pin exists:
@@ -17,7 +15,8 @@ Why the setuptools pin exists:
 - `gpflow` currently imports `pkg_resources`.
 - that means the environment needs `setuptools<81` until the project or its dependencies move away from that import.
 
-`environment.yml` is still present as a legacy Conda description, but `uv` is the recommended path going forward.
+`environment.yml` is still present as a legacy Conda description, but `uv` is the
+recommended path going forward.
 
 ## Common commands
 
@@ -27,10 +26,27 @@ Run the main behavior tests:
 .venv/bin/python -m unittest tests.gpflow_tests
 ```
 
-Run the slower correctness regression tests:
+Run the slower correctness regression tests, which compare against the earlier notebook
+workflow:
 
 ```bash
 .venv/bin/python -m unittest tests.correctness
+```
+
+Run the lighter regression tests for data-shape behavior and the functional API:
+
+```bash
+.venv/bin/python -m unittest tests.characterization_tests tests.functional_api_tests
+```
+
+Run the full maintained test set explicitly:
+
+```bash
+.venv/bin/python -m unittest \
+  tests.gpflow_tests \
+  tests.correctness \
+  tests.characterization_tests \
+  tests.functional_api_tests
 ```
 
 Run the Makefile target:
@@ -39,21 +55,73 @@ Run the Makefile target:
 make all_tests
 ```
 
-Note: the `Makefile` still assumes `python` exists on `PATH`, so direct `.venv/bin/python ...` commands are currently more reliable.
+Note: the `Makefile` still assumes `python` exists on `PATH`, and `all_tests` only runs
+`tests.gpflow_tests`. Direct `.venv/bin/python ...` commands are currently more complete and
+more reliable.
 
 Generate API docs:
 
 ```bash
-pdoc gpcell
+.venv/bin/pdoc --docformat numpy gpcell
 ```
 
 Or write them out statically:
 
 ```bash
-pdoc -o docs gpcell
+.venv/bin/pdoc --docformat numpy -o docs gpcell
 ```
 
 If you do not want generated HTML mixed with handwritten docs, use a different output directory.
+
+Run the Ruff checks used by CI:
+
+```bash
+.venv/bin/ruff check --select E9,F63,F7,F82 .
+.venv/bin/ruff format --check gpcell tests
+```
+
+Run the broader local lint check:
+
+```bash
+.venv/bin/ruff check .
+```
+
+## Paper and dissertation build
+
+The dissertation is a Quarto book in `scripts/dissertation/`. It mixes Python chunks in
+`methods.qmd`, R chunks in `results.qmd`, and static image assets.
+
+Install the additional render dependencies if the environment does not already have them:
+
+```bash
+uv pip install --python .venv/bin/python nbformat nbclient nbconvert
+Rscript -e 'install.packages(c("rmarkdown", "tidyverse"), repos="https://cloud.r-project.org")'
+```
+
+Render the PDF from the repository root:
+
+```bash
+PATH="$(pwd)/.venv/bin:$PATH" quarto render scripts/dissertation --to pdf
+```
+
+The `PATH` prefix tells Quarto to use the project virtualenv for Python execution. Without
+it, Quarto may pick a system Python that does not have `yaml`, Jupyter, GPflow, or the
+project dependencies installed.
+
+After rendering, compare generated artifacts against the tracked baseline:
+
+```bash
+git status --short
+git diff --stat
+git show HEAD:scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf > /tmp/gpcell-head.pdf
+pdftotext /tmp/gpcell-head.pdf /tmp/gpcell-head.txt
+pdftotext scripts/dissertation/_book/GPCell--A-Performant-Framework-for-Gaussian-Processes-in-Bioinformatics.pdf /tmp/gpcell-new.txt
+diff -u /tmp/gpcell-head.txt /tmp/gpcell-new.txt
+```
+
+Small PDF binary differences can come from renderer metadata even when extracted text is
+unchanged. Treat notebook output clearing and PDF metadata churn as generated-artifact
+noise unless source cells or extracted content changed.
 
 ## Working model of the codebase
 
@@ -102,6 +170,16 @@ Parallel fitting writes memmap data into `./temp`. This directory is operational
 
 The MCMC path exists and is scientifically interesting, but the most stable and clearly validated path in the repo today is still the BIC/bootstrap workflow.
 
+### Functional API status
+
+The functional API in `gpcell/functional.py` now provides `DetectorConfig`,
+`DetectorData`, `PreparedData`, `BICResult`, `BootstrapResult`, `PipelineResult`,
+`load_detector_data(...)`, `prepare_detector_data(...)`, `fit_bic(...)`,
+`fit_bootstrap(...)`, and `run_pipeline(...)`.
+
+`OscillatorDetector` remains the compatibility API and delegates the BIC/bootstrap fitting
+work to the functional layer. MCMC is still kept on the class adapter path.
+
 ## Suggested contributor workflow
 
 1. Reproduce behavior on the Hes dataset first.
@@ -113,7 +191,6 @@ The MCMC path exists and is scientifically interesting, but the most stable and 
 
 ## Good first cleanup targets
 
-- Add modern package metadata such as `pyproject.toml`.
 - Separate handwritten docs from generated API docs more cleanly.
 - Add a documented install path for users outside the dissertation environment.
 - Promote one notebook or script into a polished end-to-end example.
@@ -139,16 +216,8 @@ The quickest reliable way to reorient inside the codebase is:
 
 If tests fail immediately with import errors such as missing `numpy`, the problem is usually the active `uv` environment rather than the project logic. Recreate or reactivate `.venv` before treating that as a code regression.
 
-## Linting
-
-Run lint checks:
-
-```bash
-.venv/bin/python -m ruff check .
-```
-
 Apply safe automatic fixes:
 
 ```bash
-.venv/bin/python -m ruff check . --fix
+.venv/bin/ruff check . --fix
 ```

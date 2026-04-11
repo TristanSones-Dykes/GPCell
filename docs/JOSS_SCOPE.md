@@ -19,9 +19,12 @@ That is already a credible JOSS contribution if presented cleanly.
 
 - An OSI-approved license.
 - A real reusable Python package under `gpcell/`.
+- `pyproject.toml` package metadata and dependency declarations.
 - Tests tied to an included dataset.
 - CI for linting and publishing generated API docs.
 - An example dataset and simulation utilities.
+- A functional API with typed result objects alongside the original `OscillatorDetector`
+  workflow.
 - A dissertation that already explains motivation, methods, and evaluation.
 
 ## What still needs work for a strong JOSS submission
@@ -31,8 +34,8 @@ That is already a credible JOSS contribution if presented cleanly.
 - Create JOSS paper files:
   - `paper.md`
   - `paper.bib`
-- Add polished install instructions for a fresh user.
-- Add package metadata suitable for installation and citation.
+- Keep install instructions polished and tested for a fresh user.
+- Add citation metadata suitable for JOSS and archival releases.
 - Tighten the README so it sells the software, not just the dissertation.
 - Make at least one reproducible user example easy to run.
 
@@ -67,6 +70,7 @@ GPCell is a Python library for Gaussian-process-based detection of oscillatory s
 - modular GP construction via `GPRConstructor`,
 - reusable `GaussianProcess` wrapper over GPflow models,
 - domain workflow API via `OscillatorDetector`,
+- functional workflow API via `run_pipeline(...)` and typed dataclass results,
 - parallel fitting for many traces and replicates,
 - included simulation and regression-testing utilities.
 
@@ -81,15 +85,16 @@ Those can still be mentioned as extensions, but they should not be the load-bear
 
 ## Suggested near-term backlog
 
-1. Add `pyproject.toml` and make installation straightforward.
-2. Add `CITATION.cff`.
-3. Create `paper.md` from the software contribution, not by shrinking the dissertation wholesale.
-4. Add one polished example script or notebook using `OscillatorDetector.from_file(...)`.
-5. Decide what the supported workflows are:
+1. Add `CITATION.cff`.
+2. Create `paper.md` and `paper.bib` from the software contribution, not by shrinking the
+   dissertation wholesale.
+3. Add one polished example script or notebook using `OscillatorDetector.from_file(...)` or
+   the functional `run_pipeline(...)` API.
+4. Decide what the supported workflows are:
    - likely `BIC`,
    - likely `BOOTSTRAP`,
    - maybe `MCMC` as experimental.
-6. Tighten CI so tests run in the documented environment.
+5. Tighten CI so the full documented test set runs in the documented environment.
 
 ## A practical paper outline
 
@@ -108,5 +113,6 @@ Those can still be mentioned as extensions, but they should not be the load-bear
 
 ## Bottom line
 
-The repo is already close enough in substance for JOSS. The main missing pieces are packaging, sharper software framing, and a cleaner path for a new user to install, run, and understand the stable features.
-
+The repo is already close enough in substance for JOSS. The main missing pieces are citation
+metadata, JOSS paper files, sharper software framing, and a cleaner maintained example for a
+new user to run and understand the stable features.

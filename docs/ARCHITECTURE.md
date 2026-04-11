@@ -4,10 +4,11 @@
 
 GPCell is not just a collection of GP utilities. It currently embodies a specific scientific workflow for detecting oscillatory single-cell gene expression traces, especially the Hes1-style analysis used in the dissertation.
 
-At a high level, the repository has two layers:
+At a high level, the repository has three layers:
 
 - a reusable GP-fitting layer built on GPflow and TensorFlow Probability,
-- a domain workflow layer exposed through `OscillatorDetector`.
+- a functional domain workflow layer exposed through `gpcell.functional`,
+- a compatibility workflow layer exposed through `OscillatorDetector`.
 
 The dissertation source in `scripts/dissertation/` is important context, because several design choices in the codebase are easiest to understand through that biological and statistical motivation.
 
@@ -41,6 +42,30 @@ Important behavior:
 - bootstrap depends on BIC results.
 - plot requests are configured at construction time through the `plots` parameter.
 - `joblib=True` switches the OU/OUosc fitting path to the parallel utilities.
+- the BIC/bootstrap fitting work delegates to the functional layer while preserving the
+  historical mutable fields used by notebooks and scripts.
+
+### `gpcell/functional.py`
+
+Functional workflow API for new code. It provides dataclass-based inputs and outputs:
+
+- `DetectorConfig`
+- `DetectorData`
+- `PreparedData`
+- `BICResult`
+- `BootstrapResult`
+- `PipelineResult`
+
+The key functions are:
+
+- `load_detector_data(...)`
+- `prepare_detector_data(...)`
+- `fit_bic(...)`
+- `fit_bootstrap(...)`
+- `run_pipeline(...)`
+
+This layer is intentionally easier to test than the class adapter. It currently supports
+the BIC and bootstrap paths; MCMC remains on `OscillatorDetector`.
 
 ### `gpcell/utils.py`
 
@@ -118,13 +143,15 @@ This is why `utils.fit_processes_joblib(...)` and the backend worker functions a
 
 - There is a clear core API.
 - The Hes example is wired into tests.
+- Functional API and characterization tests now cover some lower-level behavior.
+- `pyproject.toml` provides package metadata and the main dependency list.
 - The dissertation sources explain the intended methods and contribution.
 - CI exists for linting and publishing API docs.
 - The codebase already contains regression-minded tests, not just smoke tests.
 
 ## What still feels research-grade
 
-- Packaging is still repo-centric rather than polished for installation from PyPI.
+- Packaging is installable from the repository, but there is no polished PyPI release path yet.
 - Notebook and script organization is mixed between archival and active material.
 - The MCMC/Bayes-factor path is still experimental relative to the BIC workflow.
 - Handwritten project docs were previously minimal.
@@ -142,4 +169,3 @@ If you are new to the repo, read in this order:
 6. [`gpcell/backend/gaussian_process.py`](../gpcell/backend/gaussian_process.py)
 7. [`tests/gpflow_tests.py`](../tests/gpflow_tests.py)
 8. dissertation chapters in `scripts/dissertation/`
-
