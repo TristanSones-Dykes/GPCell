@@ -91,10 +91,26 @@ print(result.bic.BIC_diffs)
 The functional API currently supports the BIC and bootstrap paths. The MCMC path remains
 available through `OscillatorDetector` and is still treated as experimental.
 
+## Examples
+
+Maintained examples live in [`examples/`](examples/). The canonical Hes1 functional API
+workflow can be run from the repository root:
+
+```bash
+.venv/bin/python examples/hes1_bic_workflow.py
+```
+
+For a faster environment check, reduce the cell count and replicate count:
+
+```bash
+.venv/bin/python examples/hes1_bic_workflow.py --max-cells 3 --bic-replicates 1
+```
+
 ## Repository map
 
 - `gpcell/`: main library code.
 - `gpcell/backend/`: GP constructors, priors, types, parameter assignment helpers, simulation kernels.
+- `examples/`: maintained user-facing examples.
 - `tests/`: regression and behavior tests against the Hes example and earlier implementations.
 - `data/`: Hes example data plus simulated and MATLAB-derived benchmark datasets.
 - `scripts/`: exploratory notebooks and supporting scripts.
