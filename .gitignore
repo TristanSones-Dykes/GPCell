@@ -3,6 +3,7 @@ docs/*
 !docs/ARCHITECTURE.md
 !docs/DEVELOPMENT.md
 !docs/JOSS_SCOPE.md
+!docs/TECHNIQUE_VALIDATION_RESULTS.md
 data/simulation/
 temp/*
 

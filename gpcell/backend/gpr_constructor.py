@@ -226,9 +226,7 @@ class GPRConstructor:
         if X_array.shape[0] != n_times:
             raise ValueError("X and y must contain the same number of time points.")
         if n_outputs != self.coregion_output_dim:
-            raise ValueError(
-                f"y has {n_outputs} outputs, expected {self.coregion_output_dim}."
-            )
+            raise ValueError(f"y has {n_outputs} outputs, expected {self.coregion_output_dim}.")
 
         times = np.repeat(X_array, n_outputs, axis=0)
         output_index = np.tile(np.arange(n_outputs, dtype=float), n_times).reshape(-1, 1)
