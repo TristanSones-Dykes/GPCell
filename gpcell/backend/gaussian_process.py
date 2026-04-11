@@ -4,20 +4,19 @@ from typing import List, Optional, Tuple, cast
 # Third-Party Library Imports
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from gpflow.models import GPMC, GPR, SVGP
 
 # Direct Namespace Imports
-from gpflow.optimizers import Scipy, SamplingHelper
-from gpflow.models import GPR, GPMC
+from gpflow.optimizers import SamplingHelper, Scipy
 from gpflow.posteriors import PrecomputeCacheType
-from gpflow.utilities import to_default_float as f64, parameter_dict
-
-from tensorflow_probability import mcmc
+from gpflow.utilities import parameter_dict
+from gpflow.utilities import to_default_float as f64
 from tensorflow import Tensor
+from tensorflow_probability import mcmc
 
 # Internal Project Imports
 from ._types import Ndarray
 from .gpr_constructor import GPRConstructor
-
 
 NOCACHE = PrecomputeCacheType.NOCACHE
 
@@ -55,7 +54,11 @@ class GaussianProcess:
         if not hasattr(self, "fit_gp"):
             raise ValueError("Model has not been fit yet.")
 
-        fit_mean, fit_var = self.fit_gp.fused_predict_f(X, full_cov=full_cov)
+        match self.fit_gp:
+            case SVGP():
+                fit_mean, fit_var = self.fit_gp.predict_f(X, full_cov=full_cov)
+            case _:
+                fit_mean, fit_var = self.fit_gp.fused_predict_f(X, full_cov=full_cov)
         return fit_mean.numpy(), fit_var.numpy()  # type: ignore
 
     def fit(
@@ -86,6 +89,10 @@ class GaussianProcess:
         """
         gp_reg = self.constructor(X, y)
 
+        if isinstance(gp_reg, SVGP):
+            self._fit_svgp(gp_reg, X, y, Y_var)
+            return
+
         opt = Scipy()
         opt.minimize(
             gp_reg.training_loss,
@@ -107,6 +114,54 @@ class GaussianProcess:
                 self.fit_gp = gp_reg.posterior()
             case GPMC():
                 self._run_mcmc(gp_reg)
+
+    def _fit_svgp(
+        self,
+        model: SVGP,
+        X: Ndarray,
+        y: Ndarray,
+        Y_var: bool = False,
+    ):
+        """
+        Fit a Sparse Variational GP using stochastic Adam updates.
+
+        Parameters
+        ----------
+        model : SVGP
+            Sparse variational model to fit.
+        X : Ndarray
+            Input domain.
+        y : Ndarray
+            Target values.
+        Y_var : bool, optional
+            Calculate predictive variance at the training inputs, by default False.
+        """
+        X_train, y_train = self.constructor.prepare_training_data(X, y)
+        batch_size = min(self.constructor.svgp_batch_size, X_train.shape[0])
+        dataset = (
+            tf.data.Dataset.from_tensor_slices((X_train, y_train))
+            .shuffle(X_train.shape[0], seed=self.constructor.kmeans_random_state)
+            .batch(batch_size)
+            .repeat()
+        )
+        data_iterator = iter(dataset)
+        training_loss = model.training_loss_closure(data_iterator, compile=True)
+        optimizer = tf.optimizers.Adam(self.constructor.svgp_learning_rate)
+
+        self.training_loss_history = [float(training_loss().numpy())]
+        for _ in range(self.constructor.svgp_adam_steps):
+            with tf.GradientTape() as tape:
+                loss = training_loss()
+            gradients = tape.gradient(loss, model.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+            self.training_loss_history.append(float(loss.numpy()))
+
+        self.log_posterior_density = model.elbo((X_train, y_train)).numpy()
+        self.noise = model.likelihood.variance**0.5
+        self.fit_gp = model
+
+        if Y_var:
+            self.Y_var = model.predict_y(X_train)[1].numpy()
 
     def _run_mcmc(
         self,
